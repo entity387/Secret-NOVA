@@ -686,59 +686,5 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 <script>window.addEventListener("load",()=>{if(window.emailjs)emailjs.init("G7xmtT6VrVzxi1rfJ");});</script>
 </head>
 <body>
-<!-- ═══════════════════════════════════════════════════
-     NOVA SHUTDOWN CONTROL — change NOVA_SHUTDOWN to true when closing
-     ═══════════════════════════════════════════════════ -->
-<script>
-  const NOVA_SHUTDOWN = true; // TESTING — change back to date check when done
-  if(NOVA_SHUTDOWN){
-    document.addEventListener('DOMContentLoaded', ()=>{
-      document.body.style.cssText = 'margin:0;padding:0;background:#050508;overflow:hidden;font-family:\'Share Tech Mono\',monospace';
-      document.body.innerHTML = `
-        <canvas id="sd_stars" style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0"></canvas>
-        <div style="position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto">
-          <div style="max-width:500px;width:100%;text-align:center;color:#c084fc;font-size:14px;line-height:2.4">
-            <div style="color:#a855f7;font-family:'VT323',monospace;font-size:72px;margin-bottom:4px;text-shadow:0 0 28px #a855f7;letter-spacing:4px">NOVA</div>
-            <div style="color:#581c87;font-size:11px;letter-spacing:5px;margin-bottom:36px">2 May 2026 — 30 June 2026</div>
-            Nova is now closed.<br><br>
-            Thank you for being part of it.<br>
-            It was small. It was ours.<br>
-            That was enough.<br><br>
-            The games are still out there.<br>
-            Someone Like You — three browser games, free, on itch.io.<br>
-            Start with The Wrong Cave.<br>
-            The credits at the end of the third one are worth getting to.<br><br>
-            not for someone like you.<br>
-            for you.<br><br>
-            Thanks for using Nova. This is Rhys, signing off.<br><br>
-            <a href="https://silent-9.itch.io/someonelikeyou" style="color:#a855f7;text-decoration:none;border-bottom:1px solid #a855f7" target="_blank">silent-9.itch.io/someonelikeyou</a>
-          </div>
-        </div>
-      `;
-      const c = document.getElementById('sd_stars');
-      function resize(){ c.width = window.innerWidth; c.height = window.innerHeight; }
-      resize();
-      const ctx = c.getContext('2d');
-      const stars = Array.from({length:220},()=>({
-        x: Math.random(), y: Math.random(),
-        r: Math.random()*1.5+0.2, a: Math.random()
-      }));
-      function drawStars(){
-        ctx.clearRect(0,0,c.width,c.height);
-        stars.forEach(s=>{
-          s.a += (Math.random()-0.5)*0.01;
-          s.a = Math.max(0.1,Math.min(1,s.a));
-          ctx.beginPath();
-          ctx.arc(s.x*c.width, s.y*c.height, s.r, 0, Math.PI*2);
-          ctx.fillStyle = 'rgba(168,85,247,'+s.a.toFixed(2)+')';
-          ctx.fill();
-        });
-        requestAnimationFrame(drawStars);
-      }
-      drawStars();
-      window.addEventListener('resize', resize);
-    });
-  }
-</script>
 </body>
 </html>
