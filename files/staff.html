@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOVA — Staff</title>
+<link rel="stylesheet" href="nova-shared.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-name">NOVA</div>
+    <div class="sidebar-logo-sub">Staff Console</div>
+  </div>
+  <nav class="sidebar-nav">
+    <button class="nav-btn active" onclick="showPanel('tickets')" id="nav-tickets"><span class="nav-icon">⊟</span> Tickets</button>
+    <button class="nav-btn" onclick="showPanel('mytickets')" id="nav-mytickets"><span class="nav-icon">🎫</span> My Tickets</button>
+    <button class="nav-btn"        onclick="showPanel('users')"   id="nav-users"><span class="nav-icon">⊕</span> Users</button>
+    <button class="nav-btn"        onclick="showPanel('guide')"   id="nav-guide"><span class="nav-icon">📋</span> Guide</button>
+    <button class="nav-btn" onclick="window.location.href='chat.html'" style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px"><span class="nav-icon">←</span> Back to Chat</button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user-email" id="userEmail">—</div>
+    <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+  </div>
+</aside>
+
+<div class="main-area">
+  <div class="topbar">
+    <div class="topbar-title" id="topbarTitle">TICKETS</div>
+    <div class="topbar-badges">
+      <span class="badge badge-maint" id="badgeMaint" style="display:none">⚠ MAINTENANCE</span>
+      <span class="badge badge-staff">⚡ STAFF</span>
+    </div>
+  </div>
+  <div class="banner banner-maint" id="bannerMaint"></div>
+  <div class="content" id="mainContent"><div class="empty">Loading...</div></div>
+</div>
+
+<div id="modalContainer"></div>
+
+<script>
+(function(){
+  const Q=[];
+  const proxy=n=>function(){Q.push([n,arguments]);};
+  ['showPanel','manageUser','warnUser','muteUser','confirmWarn','confirmMute','closeModal','viewNotes','saveNotes','staffAppealAction'].forEach(n=>window[n]=proxy(n));
+  window._staffDrain=function(){
+    Q.forEach(([n,a])=>{if(typeof window[n]==='function'&&window[n].toString().indexOf('proxy')===-1)window[n](...a);});
+  };
+})();
+</script>
+<script type="module">
+import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDocs, getDoc, addDoc, updateDoc,
+  deleteDoc, query, orderBy, onSnapshot, arrayUnion
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyClEfbrTpSwVPpThWZJukobJN9tCKMXTx4",
+  authDomain: "nova-7a26f.firebaseapp.com",
+  projectId: "nova-7a26f",
+  storageBucket: "nova-7a26f.firebasestorage.app",
+  messagingSenderId: "98300801242",
+  appId: "1:98300801242:web:77c16453b6dac8fed3b5e3",
+  measurementId: "G-67N1G1RFMS"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const uid   = sessionStorage.getItem('nova_uid');
+const email = sessionStorage.getItem('nova_email');
+const role  = sessionStorage.getItem('nova_role');
+const simulating = sessionStorage.getItem('nova_simulating');
+const realRole = sessionStorage.getItem('nova_real_role') || role;
+if (!uid || (role !== 'Staff' && !(simulating && ['Owner','Mod'].includes(realRole)))) { window.location.href = 'index.html'; }
+if (simulating) { sessionStorage.setItem('nova_role', realRole); sessionStorage.removeItem('nova_simulating'); }
+
+document.getElementById('userEmail').textContent = email || '—';
+
+onSnapshot(doc(db,'settings','global'), snap => {
+  if (!snap.exists()) return;
+  const s = snap.data();
+  const bm = document.getElementById('bannerMaint');
+  document.getElementById('badgeMaint').style.display = s.maintenance ? '' : 'none';
+  if (s.maintenance) { bm.style.display='block'; bm.textContent='⚠ '+(s.maintenanceMessage||'Maintenance active.'); }
+  else bm.style.display = 'none';
+});
+
+// ── HELPERS ───────────────────────────────────────────────
+window.showPanel = function(name) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const nb = document.getElementById('nav-'+name); if (nb) nb.classList.add('active');
+  document.getElementById('topbarTitle').textContent = name.toUpperCase();
+  ({ tickets, users, mytickets, guide: guidePanel })[name]?.();
+};
+window.doLogout = async () => { await signOut(auth); sessionStorage.clear(); window.location.href='index.html'; };
+
+function ts(n) {
+  if (!n) return '—';
+  const d = typeof n==='object' && n.seconds ? new Date(n.seconds*1000) : new Date(n);
+  return d.toLocaleString();
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function closeModal() { document.getElementById('modalContainer').innerHTML = ''; }
+function openModal(html, lg=false) {
+  document.getElementById('modalContainer').innerHTML =
+    `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+       <div class="modal${lg?' modal-lg':''}">${html}</div>
+     </div>`;
+}
+window.closeModal = closeModal;
+
+// ══════════════════════════════════════════════════════════
+// TICKETS
+// ══════════════════════════════════════════════════════════
+async function tickets() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(query(collection(db,'tickets'), orderBy('timestamp','desc')));
+
+  // Group by status — hide tickets escalated away from Staff
+  const groups = { open:[], in_progress:[], closed:[] };
+  snap.docs.forEach(d => {
+    const t = d.data();
+    const el = t.escalationLevel || 'none';
+    // Staff don't see tickets escalated to Mod or Owner, or ban appeals
+    if (el === 'staff_to_mod' || el === 'mod_to_senior' || el === 'senior_to_owner') return;
+    if (t.category === 'ban_appeal') return; // ban appeals go to Mod
+    const s = t.status || 'open';
+    if (!groups[s]) groups[s] = [];
+    groups[s].push({ ...t, id:d.id });
+  });
+
+  function renderGroup(label, items, pillClass) {
+    if (!items.length) return '';
+    const rows = items.map(t => {
+      const ep = {none:'pill-none',staff_to_mod:'pill-s2m',mod_to_senior:'pill-s2m',senior_to_owner:'pill-m2o'}[t.escalationLevel]||'pill-none';
+      const pp = t.priority==='high'?'<span style="font-family:var(--mono);font-size:9px;background:rgba(248,81,73,0.15);color:var(--danger);padding:1px 6px;border-radius:2px;margin-left:5px">HIGH</span>':t.priority==='medium'?'<span style="font-family:var(--mono);font-size:9px;background:rgba(210,153,34,0.15);color:var(--warn);padding:1px 6px;border-radius:2px;margin-left:5px">MED</span>':'';
+      const isAssignedToMe = t.assignedTo === email;
+      const isUnassigned   = !t.assignedTo;
+      return `<tr>
+        <td><span style="cursor:pointer;color:var(--text);font-weight:600" onclick="openTicket('${t.id}')">${escHtml(t.subject||'—')}</span></td>
+        <td class="mono" style="font-size:11px">${t.createdBy||'—'}</td>
+        <td class="mono" style="font-size:11px">${t.assignedTo||'<span style="color:var(--text-dim)">Unassigned</span>'}</td>
+        <td><span class="pill ${ep}">${{'none':'None','staff_to_mod':'Staff→Mod','mod_to_senior':'Mod→Senior Mod','senior_to_owner':'Senior→Owner'}[t.escalationLevel]||t.escalationLevel||'none'}</span></td>
+        <td class="mono" style="font-size:11px">${ts(t.timestamp)}</td>
+        <td>
+          <div class="flex-gap-sm">
+            <button class="btn btn-sm" onclick="openTicket('${t.id}')">Open</button>
+            ${isUnassigned ? `<button class="btn btn-sm btn-success" onclick="assignToSelf('${t.id}')">Assign Me</button>` : ''}
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    return `<div class="mb-20">
+      <div class="section-header">
+        <div class="section-title"><span class="pill ${pillClass}">${label}</span></div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr>
+          <th>Subject</th><th>Created By</th><th>Assigned To</th><th>Escalation</th><th>Created</th><th>Actions</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
+  }
+
+  const html = renderGroup('Open', groups.open, 'pill-open')
+             + renderGroup('In Progress', groups.in_progress, 'pill-progress')
+             + renderGroup('Closed', groups.closed, 'pill-closed');
+
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="panel-title">Ticket Queue</div>
+    ${html || '<div class="empty">No tickets found</div>'}
+  </div>`;
+}
+
+window.assignToSelf = async function(id) {
+  await updateDoc(doc(db,'tickets',id), { assignedTo:email, status:'in_progress' });
+  
+
+const PUNISHMENT_GUIDE = {
+  "01": { label:"Be Respectful", rows:[
+    { sev:"low",      eg:"Minor rude comment",              staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Targeted insults / harassment",   staff:"Warn + Mute 1h",             mod:"Warn + Mute 2h" },
+    { sev:"high",     eg:"Sustained hate speech / slurs",   staff:"Alert Mod ⚠",                mod:"Temp Ban 3d" },
+  ]},
+  "02": { label:"No Spam", rows:[
+    { sev:"low",      eg:"Repeated messages",               staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Flooding a channel",              staff:"Mute 1h",                    mod:"Mute 2h + Warn" },
+    { sev:"high",     eg:"Bot spam / raid",                 staff:"Alert Mod ⚠",                mod:"Temp Ban 7d" },
+  ]},
+  "03": { label:"No NSFW Content", rows:[
+    { sev:"medium",   eg:"Inappropriate image or link",     staff:"Warn",                       mod:"Warn + Mute 6h" },
+    { sev:"high",     eg:"Explicit content",                staff:"Alert Mod ⚠",                mod:"Temp Ban 7d" },
+    { sev:"critical", eg:"CSAM or illegal content",         staff:"Alert Owner 🚨",              mod:"Perm Ban + log" },
+  ]},
+  "04": { label:"No Advertising", rows:[
+    { sev:"low",      eg:"Casual mention of own project",   staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Posting invite links or ads",     staff:"Warn + Mute 1h",             mod:"Mute 3h + Warn" },
+    { sev:"high",     eg:"Repeated or scam links",          staff:"Alert Mod ⚠",                mod:"Temp Ban 3d" },
+  ]},
+  "05": { label:"No Doxxing", rows:[
+    { sev:"high",     eg:"Sharing someone's private info",  staff:"Alert Mod ⚠",                mod:"Temp Ban 14d" },
+    { sev:"critical", eg:"Coordinated doxxing or threats",  staff:"Alert Mod ⚠",                mod:"Perm Ban" },
+  ]},
+  "06": { label:"Not Following Staff", rows:[
+    { sev:"low",      eg:"Ignored one warning",             staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Repeatedly ignoring staff",       staff:"Mute 1h",                    mod:"Mute 3h + Warn" },
+    { sev:"high",     eg:"Openly defying moderation",       staff:"Alert Mod ⚠",                mod:"Temp Ban 1d" },
+  ]},
+  "07": { label:"Ban / Mute Evasion", rows:[
+    { sev:"high",     eg:"Alt account while muted",         staff:"Alert Mod ⚠",                mod:"Temp Ban 7d (both accounts)" },
+    { sev:"critical", eg:"Alt account while banned",        staff:"Alert Mod ⚠",                mod:"Perm Ban all accounts" },
+  ]},
+  "08": { label:"English Only in General", rows:[
+    { sev:"low",      eg:"Occasional non-English",          staff:"Remind",                     mod:"Remind" },
+    { sev:"medium",   eg:"Repeatedly ignoring reminder",    staff:"Warn",                       mod:"Warn + Mute 1h" },
+  ]},
+  "09": { label:"Minimodding", rows:[
+    { sev:"low",      eg:"Casually calling out users",      staff:"Remind",                     mod:"Remind" },
+    { sev:"medium",   eg:"Issuing fake warnings publicly",  staff:"Warn",                       mod:"Warn" },
+  ]},
+  "__hacking__": { label:"Hacking / Exploiting", rows:[
+    { sev:"critical", eg:"Exploiting platform code or bugs",staff:"Perm Ban + Alert Owner 🚨",  mod:"Perm Ban + Alert Owner 🚨" },
+    { sev:"critical", eg:"Attempting to compromise accounts",staff:"Perm Ban + Alert Owner 🚨", mod:"Perm Ban + Alert Owner 🚨" },
+  ]},
+};
+
+const SEV_CFG = {
+  low:      { col:"#3fb950", bg:"rgba(63,185,80,.12)",    label:"Low" },
+  medium:   { col:"#d29922", bg:"rgba(210,153,34,.12)",   label:"Medium" },
+  high:     { col:"#f85149", bg:"rgba(248,81,73,.12)",    label:"High" },
+  critical: { col:"#e040fb", bg:"rgba(224,64,251,.1)",    label:"Critical" },
+};
+
+function getModReason() {
+  const sel = document.getElementById('mRuleSelect');
+  if (!sel || !sel.value) { alert('Please select a rule before continuing.'); return null; }
+  if (sel.value === 'other') {
+    const txt = (document.getElementById('mOtherText')?.value||'').trim();
+    if (txt.length < 3) { alert('Please describe the reason (at least 3 characters).'); return null; }
+    return 'Other: ' + txt;
+  }
+  const guide = PUNISHMENT_GUIDE[sel.value];
+  return (guide ? guide.label : sel.value);
+}
+
+window.showRuleHint = function showRuleHint(val, role) {
+  const wrap = document.getElementById('mRuleHint');
+  if (!wrap) return;
+  if (!val || val === 'other') { wrap.innerHTML = ''; return; }
+  const guide = PUNISHMENT_GUIDE[val];
+  if (!guide) { wrap.innerHTML = ''; return; }
+  const rows = guide.rows.map(r => {
+    const s = SEV_CFG[r.sev] || SEV_CFG.low;
+    const action = role === 'staff' ? r.staff : r.mod;
+    const isOwner = action.includes('Owner');
+    const isMod   = action.includes('Mod');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:700;color:${s.col};background:${s.bg};padding:2px 8px;border-radius:8px;font-family:var(--mono);flex-shrink:0;min-width:62px;text-align:center">${s.label}</span>
+      <span style="font-size:11px;color:var(--text-muted);flex:1;line-height:1.4">${r.eg}</span>
+      <span style="font-size:11px;font-weight:700;flex-shrink:0;color:${isOwner?'#e040fb':isMod?'#d29922':'var(--text)'}">${action}</span>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+    <div style="font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Rule: ${guide.label}</div>
+    <div style="border-top:1px solid var(--border)">${rows}</div>
+  </div>`;
+}
+
+function renderGuide(containerId, role) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const keys = ["01","02","03","04","05","06","07","08","09","__hacking__"];
+  wrap.innerHTML = keys.map(key => {
+    const rule = PUNISHMENT_GUIDE[key];
+    if (!rule) return '';
+    const isHack = key === '__hacking__';
+    const rowsHtml = rule.rows.map(r => {
+      const s = SEV_CFG[r.sev] || SEV_CFG.low;
+      const action = role === 'staff' ? r.staff : r.mod;
+      const isOwner = action.includes('Owner');
+      const isMod   = action.includes('Mod');
+      return `<tr>
+        <td style="padding:7px 12px;width:90px"><span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${s.bg};color:${s.col};font-family:var(--mono)">${s.label}</span></td>
+        <td style="padding:7px 12px;font-size:12px;color:var(--text-muted)">${r.eg}</td>
+        <td style="padding:7px 12px;font-size:12px;font-weight:600;color:${isOwner?'#e040fb':isMod?'#d29922':'var(--text)'}">${action}</td>
+      </tr>`;
+    }).join('');
+    return `<div style="background:var(--surface1);border:1px solid ${isHack?'rgba(224,64,251,.3)':'var(--border)'};border-radius:10px;margin-bottom:12px;overflow:hidden">
+      <div style="padding:10px 14px;background:${isHack?'rgba(224,64,251,.06)':'var(--surface2)'};border-bottom:1px solid ${isHack?'rgba(224,64,251,.2)':'var(--border)'};display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:700">${isHack?'🚨 ':''} ${rule.label}</span>
+        ${isHack?'<span style="margin-left:auto;font-family:var(--mono);font-size:9px;color:#e040fb;background:rgba(224,64,251,.1);border:1px solid rgba(224,64,251,.3);padding:2px 8px;border-radius:10px">ALERT OWNER IMMEDIATELY</span>':''}
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600">SEVERITY</th>
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600">EXAMPLE</th>
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600;width:180px">ACTION</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+
+function renderGuide(containerId, role) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const allRules = [
+    "01: Be Respectful","02: No Spam","03: No NSFW Content",
+    "04: No Self-Promotion or Advertising","05: No Doxxing or Personal Info",
+    "06: Not Following Staff Instructions","07: Ban/Mute Evasion",
+    "08: English Only in General","09: Minimodding","__critical__"
+  ];
+  wrap.innerHTML = allRules.map(key => {
+    const rule = PUNISHMENT_GUIDE[key];
+    if (!rule) return '';
+    const rowsHtml = rule.rows.map(r => {
+      const s = SEV_CONFIG[r.severity] || SEV_CONFIG.low;
+      const action = role === 'staff' ? r.staff : r.mod;
+      const isAlert = action.includes('Alert');
+      return `<tr>
+        <td><span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${s.bg};color:${s.col};font-family:var(--mono);letter-spacing:1px">${s.label}</span></td>
+        <td style="color:var(--text-muted);font-size:12px">${r.example}</td>
+        <td style="font-size:12px;font-weight:600;color:${isAlert?s.col:'var(--text)'}">${action}</td>
+      </tr>`;
+    }).join('');
+    const isCritical = key === '__critical__';
+    return `<div style="background:var(--surface1);border:1px solid ${isCritical?'rgba(255,0,255,.3)':'var(--border)'};border-radius:10px;margin-bottom:12px;overflow:hidden">
+      <div style="padding:10px 14px;background:${isCritical?'rgba(255,0,255,.06)':'var(--surface2)'};border-bottom:1px solid ${isCritical?'rgba(255,0,255,.2)':'var(--border)'};display:flex;align-items:center;gap:8px">
+        ${isCritical?'<span style="color:#ff00ff;font-size:14px">🚨</span>':''}
+        <span style="font-size:13px;font-weight:700">${isCritical?'Hacking / Exploiting / Illegal Activity':rule.label}</span>
+        ${isCritical?'<span style="margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:1px;color:#ff00ff;background:rgba(255,0,255,.1);border:1px solid rgba(255,0,255,.3);padding:2px 8px;border-radius:10px">ALERT OWNER IMMEDIATELY</span>':''}
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:7px 14px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600;width:100px">SEVERITY</th>
+          <th style="text-align:left;padding:7px 14px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600">EXAMPLE</th>
+          <th style="text-align:left;padding:7px 14px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600;width:200px">ACTION</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+// Show inline rule hint in moderation modals
+function showRuleHint(rule, role) {
+  const wrap = document.getElementById('mRuleHint');
+  if (!wrap) return;
+  const guide = PUNISHMENT_GUIDE[rule];
+  if (!guide) { wrap.innerHTML=''; return; }
+  const rows = guide.rows;
+  const html = rows.map(r => {
+    const s = SEV_CONFIG[r.severity] || SEV_CONFIG.low;
+    const action = role === 'staff' ? r.staff : r.mod;
+    const isAlert = action.includes('Alert Owner');
+    const isAlertMod = action.includes('Alert Mod');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:700;color:${s.col};background:${s.bg};padding:2px 7px;border-radius:8px;font-family:var(--mono);flex-shrink:0">${s.label}</span>
+      <span style="font-size:11px;color:var(--text-muted);flex:1">${r.example}</span>
+      <span style="font-size:11px;font-weight:700;color:${isAlert?'#ff00ff':isAlertMod?'#d29922':'var(--text)'};flex-shrink:0">${action}</span>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+    <div style="font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:7px">Suggested Action</div>
+    ${html}
+  </div>`;
+}
+
+function guidePanel() {
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="panel-title">📋 Punishment Guide</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">
+      Reference for punishments. Temp Ban or Perm Ban required → <span style="color:var(--warn);font-weight:600">Alert Mod</span>.
+      <span style="color:#e040fb;font-weight:600">Critical</span> → Alert Owner immediately.
+    </div>
+    <div id="guideContent"></div>
+  </div>`;
+  renderGuide('guideContent', 'staff');
+}
+
+tickets();
+if(window._staffDrain)window._staffDrain();
+};
+
+// Open ticket modal — Staff can only see chat if assigned to them
+window.staffAppealAction = async function(ticketId, action, uid, username) {
+  if (!uid) { alert('Cannot find user.'); return; }
+  if (action === 'unmute') {
+    if (!confirm(`Unmute ${username}?`)) return;
+    await updateDoc(doc(db,'users',uid), { mutedUntil: null });
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'approved' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`✅ Appeal approved — ${username} has been unmuted by ${email}.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    closeModal(); tickets();
+  } else if (action === 'deny') {
+    if (!confirm(`Deny ${username}'s mute appeal?`)) return;
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'denied' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`❌ Appeal denied — your mute will remain. If you believe this is unfair, you may escalate to a Mod.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    closeModal(); tickets();
+  }
+};
+
+window.openTicket = async function(id) {
+  const snap = await getDoc(doc(db,'tickets',id));
+  if (!snap.exists()) return;
+  const t = snap.data();
+  const isAssignedToMe = t.assignedTo === email;
+  const canEscalate    = t.escalationLevel === 'none' && t.status !== 'closed';
+  const sp = {open:'pill-open',in_progress:'pill-progress',closed:'pill-closed'}[t.status]||'pill-none';
+  const isMuteAppeal = t.category === 'mute_appeal';
+  let appealUser = null;
+  if (isMuteAppeal && t.createdByUid) {
+    const uSnap = await getDoc(doc(db,'users',t.createdByUid));
+    if (uSnap.exists()) appealUser = { uid: t.createdByUid, ...uSnap.data() };
+  }
+  const now = Date.now();
+  const isMuted = appealUser && appealUser.mutedUntil && (appealUser.mutedUntil.seconds ? appealUser.mutedUntil.seconds*1000 : new Date(appealUser.mutedUntil).getTime()) > now;
+
+  openModal(`
+    <div class="modal-title">Ticket: ${escHtml(t.subject||'—')}</div>
+    <div class="grid-2" style="gap:16px;margin-bottom:16px">
+      <div>
+        <div class="form-group">
+          <div class="form-label">Status</div>
+          <span class="pill ${sp}">${t.status||'—'}</span>
+          ${isAssignedToMe && t.status !== 'closed' ? `
+          <select class="form-select" id="tStatus" style="margin-top:8px">
+            <option value="open"        ${t.status==='open'?'selected':''}>Open</option>
+            <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
+          </select>` : ''}
+        </div>
+        <div class="form-group">
+          <div class="form-label">Assigned To</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text-muted)">${t.assignedTo||'Unassigned'}</div>
+          ${!t.assignedTo ? `<button class="btn btn-sm btn-success" style="margin-top:6px" onclick="assignToSelf('${id}');closeModal()">Assign to Myself</button>` : ''}
+        </div>
+        ${canEscalate ? `
+        <div class="form-group">
+          <div class="form-label">Escalation Reason <span style="color:var(--danger)">*</span></div>
+          <textarea class="form-textarea" id="tEscReason" placeholder="Required — describe why this needs Mod attention" style="min-height:70px"></textarea>
+        </div>` : `
+        <div class="form-group">
+          <div class="form-label">Escalation</div>
+          ${t.escalationLevel === 'staff_to_mod'
+            ? '<span class="pill pill-s2m">Escalated to Mod</span>'
+            : t.escalationLevel === 'mod_to_owner'
+              ? '<span class="pill pill-m2o">Escalated to Owner</span>'
+              : '<span class="pill pill-none">None</span>'}
+        </div>`}
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:6px">CREATED BY</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">${t.createdBy||'—'}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:6px">MESSAGE</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px;max-height:120px;overflow-y:auto">${escHtml(t.message||'(no message)')}</div>
+      </div>
+    </div>
+
+    ${isAssignedToMe ? `
+    <div class="ticket-chat-wrap">
+      <div class="ticket-chat-header">💬 Ticket Chat</div>
+      <div class="ticket-chat-messages" id="tchatMessages">
+        <div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;text-align:center;padding:20px">Loading...</div>
+      </div>
+      <div class="ticket-chat-input">
+        <input id="tchatInput" placeholder="Message..." onkeydown="if(event.key==='Enter')sendTicketChat('${id}')">
+        <button onclick="sendTicketChat('${id}')">Send</button>
+      </div>
+    </div>` : `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px">
+      💬 Ticket chat is only visible when this ticket is assigned to you
+    </div>`}
+
+    ${isMuteAppeal ? `<div style="padding:12px 14px;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:8px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:var(--text-muted)">
+        🔇 Mute Appeal — <strong>${escHtml(t.createdByUsername||t.createdBy||'?')}</strong>
+        ${isMuted?' · <span style="color:var(--warn)">Currently Muted</span>':' · <span style="color:var(--success)">Not currently muted</span>'}
+      </div>
+      <div style="display:flex;gap:8px">
+        ${isMuted?`<button class="btn" style="background:rgba(63,185,80,.15);border-color:rgba(63,185,80,.4);color:var(--success)" onclick="staffAppealAction('${id}','unmute','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">✅ Unmute</button>`:''}
+        <button class="btn" style="background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.3);color:var(--danger)" onclick="staffAppealAction('${id}','deny','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">❌ Deny Appeal</button>
+      </div>
+    </div>` : ''}
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Close</button>
+      ${canEscalate ? `<button class="btn btn-warn" onclick="escalateToMod('${id}')">Escalate to Mod</button>` : ''}
+      ${isAssignedToMe && t.status !== 'closed' ? `<button class="btn btn-primary" onclick="updateStatus('${id}')">Update Status</button>` : ''}
+    </div>`, true);
+
+  if (isAssignedToMe) loadTicketChat(id);
+};
+
+function loadTicketChat(ticketId) {
+  const q = query(collection(db,'tickets',ticketId,'chat'), orderBy('timestamp','asc'));
+  const unsub = onSnapshot(q, snap => {
+    const el = document.getElementById('tchatMessages');
+    if (!el) { unsub(); return; }
+    if (!snap.docs.length) {
+      el.innerHTML = `<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;text-align:center;padding:20px">No messages yet — start the conversation</div>`;
+      return;
+    }
+    el.innerHTML = snap.docs.map(d => {
+      const m = d.data();
+      const r = m.senderRole || 'User';
+      const cls = r==='Owner'?'avatar-owner':r==='Mod'?'avatar-mod':r==='Staff'?'avatar-staff':'avatar-user';
+      const col = r==='Owner'?'var(--gold)':r==='Mod'?'var(--info)':r==='Staff'?'var(--success)':'var(--text)';
+      return `<div class="tchat-msg">
+        <div class="tchat-avatar ${cls}">${(m.senderEmail||'?')[0].toUpperCase()}</div>
+        <div class="tchat-body">
+          <div class="tchat-meta">
+            <span class="tchat-author" style="color:${col}">${escHtml(m.senderEmail||'—')}</span>
+            <span class="tchat-time">${ts(m.timestamp)}</span>
+          </div>
+          <div class="tchat-text">${escHtml(m.text||'')}</div>
+        </div>
+      </div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+window.sendTicketChat = async function(ticketId) {
+  const input = document.getElementById('tchatInput');
+  if (!input) return;
+  const text = input.value.trim(); if (!text) return;
+  input.value = '';
+  await addDoc(collection(db,'tickets',ticketId,'chat'), {
+    text, senderUid:uid, senderEmail:email, senderRole:'Staff', timestamp:Date.now()
+  });
+  try { await updateDoc(doc(db,'tickets',ticketId), { lastStaffReply:Date.now() }); } catch(_) {}
+};
+
+window.updateStatus = async function(id) {
+  const sel = document.getElementById('tStatus');
+  if (!sel) return;
+  await updateDoc(doc(db,'tickets',id), { status:sel.value });
+  closeModal(); tickets();
+};
+
+window.escalateToMod = async function(id) {
+  const reason = document.getElementById('tEscReason')?.value.trim();
+  if (!reason) { alert('An escalation reason is required.'); return; }
+  await updateDoc(doc(db,'tickets',id), {
+    escalationLevel:'staff_to_mod',
+    escalationReason:reason,
+    escalatedBy:email,
+    status:'in_progress',
+  });
+  closeModal(); tickets();
+};
+
+// ══════════════════════════════════════════════════════════
+// USERS — Staff: Warn and Mute only
+// ══════════════════════════════════════════════════════════
+async function users() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(collection(db,'users'));
+  const rows = snap.docs.map(d => {
+    const u = d.data(); const uid2 = d.id;
+    // Staff can only see other Staff and Users — not Owner or Mod
+    if (u.role === 'Owner' || u.role === 'Mod') return '';
+    const uname = u.username || u.email || '—';
+    const now = Date.now();
+    const isMuted = u.mutedUntil && (u.mutedUntil.seconds
+      ? u.mutedUntil.seconds*1000
+      : new Date(u.mutedUntil).getTime()) > now;
+    const pfpHtml = u.pfp
+      ? `<img src="${u.pfp}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+      : `<div style="width:26px;height:26px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-dim);flex-shrink:0">${uname[0].toUpperCase()}</div>`;
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">${pfpHtml}
+        <div>
+          <div style="font-weight:600;font-size:13px">${escHtml(uname)}</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">${u.email||''}</div>
+        </div>
+      </div></td>
+      <td><span class="pill ${u.role==='Staff'?'pill-staff':'pill-user'}">${u.role==='Staff'?'⚡ ':''}${u.role||'User'}</span></td>
+      <td style="font-family:var(--mono)">${u.warningsCount||0}</td>
+      <td>${isMuted ? '<span class="pill pill-muted">Muted</span>' : u.banned ? '<span class="pill pill-banned">Banned</span>' : '<span class="pill pill-none">Active</span>'}</td>
+      <td>
+        <div class="flex-gap-sm">
+          <button class="btn btn-sm btn-warn" onclick="warnUser('${uid2}','${escHtml(uname)}')">Warn</button>
+          <button class="btn btn-sm" onclick="muteUser('${uid2}','${escHtml(uname)}')">Mute</button>
+          ${u.staffNotes?`<button class="btn btn-sm" onclick="viewNotes('${uid2}','${escHtml(uname)}')" style="border-color:rgba(20,184,166,.4);color:#14b8a6" title="${escHtml(u.staffNotes.slice(0,40))}">📋 Notes</button>`:''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5"><div class="empty">No users found</div></td></tr>';
+
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel"><div class="panel-title">User Moderation</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>User</th><th>Role</th><th>Warnings</th><th>Status</th><th>Actions</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+
+
+
+window.viewNotes = async function(uid2, uname) {
+  const snap = await getDoc(doc(db,'users',uid2));
+  const notes = snap.exists() ? (snap.data().staffNotes||'') : '';
+  openModal(`<div class="modal-title">📋 Staff Notes: ${uname}</div>
+    <div class="form-group">
+      <label class="form-label">Notes <span style="color:var(--text-dim);font-size:9px">(private — not visible to users)</span></label>
+      <textarea class="form-textarea" id="sNotesText" placeholder="Add notes about this user..." style="min-height:80px">${escHtml(notes)}</textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNotes('${uid2}')">Save Notes</button>
+    </div>`);
+};
+
+window.saveNotes = async function(uid2) {
+  const notes = document.getElementById('sNotesText')?.value.trim()||'';
+  await updateDoc(doc(db,'users',uid2),{staffNotes:notes});
+  closeModal();
+};
+
+window.warnUser = function(uid2, uname) {
+  openModal(`<div class="modal-title">⚠️ Warn: ${uname}</div>
+    <div class="form-group">
+      <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+      <select class="form-select" id="mRuleSelect" onchange="
+        var sel=this;
+        var o=document.getElementById('mOtherWrap');
+        var btn=document.getElementById('mConfirmBtn');
+        if(sel.value==='other'){o.style.display='block';if(btn)btn.disabled=true;}
+        else{o.style.display='none';if(btn)btn.disabled=false;}
+        showRuleHint(sel.value,'staff');">
+        <option value="" disabled selected>Select a rule...</option>
+        <option value="01">01 — Be Respectful</option>
+        <option value="02">02 — No Spam</option>
+        <option value="03">03 — No NSFW Content</option>
+        <option value="04">04 — No Self-Promotion or Advertising</option>
+        <option value="05">05 — No Doxxing or Personal Info</option>
+        <option value="06">06 — Not Following Staff Instructions</option>
+        <option value="07">07 — Ban/Mute Evasion</option>
+        <option value="08">08 — English Only in General</option>
+        <option value="09">09 — Minimodding</option>
+        <option value="other">Other — please explain</option>
+      </select>
+    </div>
+    <div id="mOtherWrap" style="display:none" class="form-group">
+      <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+      <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:68px"
+        oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+    </div>
+    <div id="mRuleHint"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-warn" id="mConfirmBtn" disabled onclick="confirmWarn('${uid2}','${uname}')">Issue Warning</button>
+    </div>`);
+};
+window.confirmWarn = async function(uid2, uname) {
+  const reason = getModReason(); if(!reason) return;
+  const snap = await getDoc(doc(db,'users',uid2));
+  const cnt  = (snap.data().warningsCount||0) + 1;
+  await updateDoc(doc(db,'users',uid2), {
+    warningsCount:cnt,
+    punishmentHistory: arrayUnion({ type:'Warn', reason, at:Date.now() }),
+    pendingNotifications: arrayUnion({ type:'Warn', reason, issuedBy:email, at:Date.now() })
+  });
+  closeModal(); users();
+};
+
+window.muteUser = function(uid2, uname) {
+  openModal(`<div class="modal-title">🔇 Mute: ${uname}</div>
+    <div class="form-group">
+      <label class="form-label">Duration</label>
+      <select class="form-select" id="mMuteDur">
+        <option value="3600000">1 hour</option>
+        <option value="7200000">2 hours</option>
+        <option value="10800000">3 hours</option>
+        <option value="21600000">6 hours</option>
+        <option value="86400000">24 hours</option>
+        <option value="604800000">7 days</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+      <select class="form-select" id="mRuleSelect" onchange="
+        var sel=this;
+        var o=document.getElementById('mOtherWrap');
+        var btn=document.getElementById('mConfirmBtn');
+        if(sel.value==='other'){o.style.display='block';if(btn)btn.disabled=true;}
+        else{o.style.display='none';if(btn)btn.disabled=false;}
+        showRuleHint(sel.value,'staff');">
+        <option value="" disabled selected>Select a rule...</option>
+        <option value="01">01 — Be Respectful</option>
+        <option value="02">02 — No Spam</option>
+        <option value="03">03 — No NSFW Content</option>
+        <option value="04">04 — No Self-Promotion or Advertising</option>
+        <option value="05">05 — No Doxxing or Personal Info</option>
+        <option value="06">06 — Not Following Staff Instructions</option>
+        <option value="07">07 — Ban/Mute Evasion</option>
+        <option value="08">08 — English Only in General</option>
+        <option value="09">09 — Minimodding</option>
+        <option value="other">Other — please explain</option>
+      </select>
+    </div>
+    <div id="mOtherWrap" style="display:none" class="form-group">
+      <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+      <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:68px"
+        oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+    </div>
+    <div id="mRuleHint"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="mConfirmBtn" disabled onclick="confirmMute('${uid2}','${uname}')">Mute User</button>
+    </div>`);
+};
+window.confirmMute = async function(uid2, uname) {
+  const reason = getModReason(); if(!reason) return;
+  const dur = parseInt(document.getElementById('mMuteDur').value);
+  const muteUntil = Date.now()+dur;
+  await updateDoc(doc(db,'users',uid2), {
+    mutedUntil: new Date(muteUntil),
+    punishmentHistory: arrayUnion({ type:'Mute', reason, at:Date.now() }),
+    pendingNotifications: arrayUnion({ type:'Mute', reason, until:muteUntil, issuedBy:email, at:Date.now() })
+  });
+  closeModal(); users();
+};
+
+tickets();
+// ── MY TICKETS ────────────────────────────────────────────
+async function mytickets() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(collection(db,'tickets'));
+  const mine = snap.docs.filter(d => {
+    const t = d.data();
+    return t.assignedTo === email;
+  });
+
+  if (!mine.length) {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="panel"><div class="panel-title">My Assigned Tickets</div>
+        <div class="empty" style="padding:48px">No tickets assigned to you yet</div>
+      </div>`;
+    return;
+  }
+
+  const rows = mine.map(d => {
+    const t = d.data(); const id = d.id;
+    const sp = {open:'pill-open',in_progress:'pill-progress',closed:'pill-closed'}[t.status]||'pill-none';
+    const pp = t.priority==='high'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(248,81,73,0.15);color:var(--danger);padding:1px 6px;border-radius:2px;margin-left:5px">HIGH</span>'
+      : t.priority==='medium'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(210,153,34,0.15);color:var(--warn);padding:1px 6px;border-radius:2px;margin-left:5px">MED</span>' : '';
+    return `<tr>
+      <td>
+        <span style="cursor:pointer;color:var(--text);font-weight:600" onclick="openTicket('${id}')">${escHtml(t.subject||'—')}</span>${pp}
+        ${t.category==='ban_appeal'?'<span style="font-family:var(--mono);font-size:8px;background:rgba(248,81,73,.15);color:var(--danger);padding:1px 6px;border-radius:4px;margin-left:5px;font-weight:700">BAN APPEAL</span>':t.category==='mute_appeal'?'<span style="font-family:var(--mono);font-size:8px;background:rgba(210,153,34,.15);color:var(--warn);padding:1px 6px;border-radius:4px;margin-left:5px;font-weight:700">MUTE APPEAL</span>':''}
+      </td>
+      <td class="mono" style="font-size:11px">${t.createdBy||'—'}</td>
+      <td><span class="pill ${sp}">${t.status||'open'}</span></td>
+      <td class="mono" style="font-size:11px">${ts(t.timestamp)}</td>
+      <td><button class="btn btn-sm" onclick="openTicket('${id}')">Open</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="panel"><div class="panel-title">My Assigned Tickets (${mine.length})</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Subject</th><th>Created By</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+
+</script>
+
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <button class="mobile-sidebar-btn" id="mobileSidebarBtn" onclick="toggleMobileSidebar()">☰</button>
+  <script>
+  function toggleMobileSidebar(){
+    document.querySelector('.sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('open');
+  }
+  function closeSidebar(){
+    document.querySelector('.sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('open');
+  }
+  // Close sidebar when nav button clicked on mobile
+  document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>{
+    if(window.innerWidth<=768) closeSidebar();
+  }));
+  </script>
+</body>
+</html>

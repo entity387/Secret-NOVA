@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // ── USERS ─────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth();
+      allow delete: if isAuth() && request.auth.token.email == 'owner@nova.com';
+    }
+
+    // ── SETTINGS ──────────────────────────────────────────
+    match /settings/{doc} {
+      allow read:  if isAuth();
+      allow write: if isAuth() && request.auth.token.email == 'owner@nova.com';
+    }
+
+    // ── TICKETS ───────────────────────────────────────────
+    match /tickets/{ticketId} {
+      allow read, list: if isAuth();
+      allow create:     if isAuth();
+      allow update:     if isAuth();
+      allow delete:     if isAuth();
+
+      match /chat/{msgId} {
+        allow read, write: if isAuth();
+      }
+    }
+
+    // ── LOGS ──────────────────────────────────────────────
+    match /logs/{logId} {
+      allow read, write: if isAuth();
+    }
+
+    // ── CHANNELS ──────────────────────────────────────────
+    match /channels/{channelId} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+
+      match /messages/{msgId} {
+        allow read:   if isAuth();
+        allow create: if isAuth();
+        allow delete: if isAuth();
+      }
+    }
+
+    // ── DIRECT MESSAGES ───────────────────────────────────
+    match /dms/{dmId} {
+      allow read, write: if isAuth();
+
+      match /messages/{msgId} {
+        allow read, write: if isAuth();
+      }
+    }
+
+    // ── GROUPS ────────────────────────────────────────────
+    match /groups/{groupId} {
+      allow read, write: if isAuth();
+
+      match /messages/{msgId} {
+        allow read, write: if isAuth();
+      }
+    }
+
+    // ── META (signup counter etc) ───────────────────────────
+    match /meta/{docId} {
+      allow read: if true; // Public so login page can show counter
+      allow write: if isAuth();
+    }
+
+    // ── VOICE ROOMS ───────────────────────────────────────
+    match /voiceRooms/{roomId} {
+      allow read, write: if isAuth();
+
+      match /participants/{uid} {
+        allow read, write: if isAuth();
+      }
+
+      match /signals/{uid} {
+        allow read, write: if isAuth();
+      }
+    }
+    // ── PRESENCE ──────────────────────────────────────────
+    match /presence/{uid} {
+      allow read: if isAuth();
+      allow write: if isAuth() && request.auth.uid == uid;
+    }
+
+  }
+}

@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOVA — Owner</title>
+<link rel="stylesheet" href="nova-shared.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-name">NOVA</div>
+    <div class="sidebar-logo-sub">Owner Console</div>
+  </div>
+  <nav class="sidebar-nav">
+    <button class="nav-btn active" onclick="showPanel('overview')"  id="nav-overview"><span class="nav-icon">◈</span> Overview</button>
+    <button class="nav-btn"        onclick="showPanel('tickets')"   id="nav-tickets"><span class="nav-icon">⊟</span> Tickets</button>
+    <button class="nav-btn" onclick="showPanel('mytickets')" id="nav-mytickets"><span class="nav-icon">🎫</span> My Tickets</button>
+    <button class="nav-btn"        onclick="showPanel('users')"     id="nav-users"><span class="nav-icon">⊕</span> Users</button>
+    <button class="nav-btn"        onclick="showPanel('channels')"  id="nav-channels"><span class="nav-icon">⊞</span> Channels</button>
+    <button class="nav-btn"        onclick="showPanel('settings')"  id="nav-settings"><span class="nav-icon">⊙</span> Settings</button>
+    <button class="nav-btn"        onclick="showPanel('logs')"      id="nav-logs"><span class="nav-icon">⊟</span> Logs</button>
+    <button class="nav-btn"        onclick="showPanel('analytics')" id="nav-analytics"><span class="nav-icon">📊</span> Analytics</button>
+    <button class="nav-btn"        onclick="showPanel('alerts')"    id="nav-alerts"><span class="nav-icon">◬</span> Alerts</button>
+    <button class="nav-btn"        onclick="showPanel('roles')"     id="nav-roles"><span class="nav-icon">◇</span> Roles</button>
+    <button class="nav-btn"        onclick="showPanel('guide')"     id="nav-guide"><span class="nav-icon">📋</span> Guide</button>
+    <button class="nav-btn"        onclick="showPanel('applications')" id="nav-applications"><span class="nav-icon">📝</span> Applications</button>
+    <button class="nav-btn" onclick="window.location.href='chat.html'"
+      style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
+      <span class="nav-icon">←</span> Back to Chat
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user-email" id="userEmail">—</div>
+    <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+  </div>
+</aside>
+
+<div class="main-area">
+  <div class="topbar">
+    <div class="topbar-title" id="topbarTitle">OVERVIEW</div>
+    <div class="topbar-badges">
+      <span class="badge badge-maint" id="badgeMaint" style="display:none">⚠ MAINTENANCE</span>
+      <span class="badge badge-debug" id="badgeDebug" style="display:none">⚡ DEBUG</span>
+      <span class="badge badge-owner">👑 OWNER</span>
+    </div>
+  </div>
+  <div class="banner banner-maint" id="bannerMaint"></div>
+  <div class="banner banner-debug" id="bannerDebug">⚡ Debug mode active</div>
+  <div class="content" id="mainContent"><div class="empty">Loading...</div></div>
+</div>
+
+<div class="debug-hud" id="debugHud">
+  <div class="hud-title">▸ Debug HUD</div>
+  <div class="hud-row"><span class="hud-key">REAL ROLE</span><span class="hud-val">Owner</span></div>
+  <div class="hud-row"><span class="hud-key">SIM ROLE</span><span class="hud-val" id="hudSim">—</span></div>
+  <div class="hud-row"><span class="hud-key">DEBUG</span><span class="hud-val" id="hudDebug">off</span></div>
+  <div class="hud-row"><span class="hud-key">USER</span><span class="hud-val" id="hudEmail" style="max-width:130px;overflow:hidden;text-overflow:ellipsis">—</span></div>
+  <hr class="divider" style="margin:10px 0">
+  <div class="form-label">Simulate Role</div>
+  <select class="form-select" onchange="simRole(this.value)" style="font-size:12px;padding:6px 10px">
+    <option value="">None</option>
+    <option value="Owner">Owner</option>
+    <option value="Mod">Mod</option>
+    <option value="Staff">Staff</option>
+  </select>
+</div>
+
+<div id="modalContainer"></div>
+
+<script type="module">
+import { initializeApp }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDocs, getDoc, addDoc, updateDoc,
+  deleteDoc, query, orderBy, limit, onSnapshot, setDoc, arrayUnion, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyClEfbrTpSwVPpThWZJukobJN9tCKMXTx4",
+  authDomain: "nova-7a26f.firebaseapp.com",
+  projectId: "nova-7a26f",
+  storageBucket: "nova-7a26f.firebasestorage.app",
+  messagingSenderId: "98300801242",
+  appId: "1:98300801242:web:77c16453b6dac8fed3b5e3",
+  measurementId: "G-67N1G1RFMS"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const uid   = sessionStorage.getItem('nova_uid');
+const email = sessionStorage.getItem('nova_email');
+const role  = sessionStorage.getItem('nova_role');
+if (!uid || role !== 'Owner') { window.location.href = 'index.html'; }
+
+document.getElementById('userEmail').textContent = email || '—';
+document.getElementById('hudEmail').textContent  = email || '—';
+
+// Settings listener
+onSnapshot(doc(db,'settings','global'), snap => {
+  if (!snap.exists()) return;
+  const s = snap.data();
+  document.getElementById('badgeMaint').style.display = s.maintenance ? '' : 'none';
+  document.getElementById('badgeDebug').style.display = s.debug ? '' : 'none';
+  const bm = document.getElementById('bannerMaint');
+  if (s.maintenance) { bm.style.display='block'; bm.textContent='⚠ '+(s.maintenanceMessage||'Maintenance active.'); }
+  else bm.style.display='none';
+  document.getElementById('bannerDebug').style.display = s.debug ? 'block' : 'none';
+  document.getElementById('debugHud').style.display    = s.debug ? 'block' : 'none';
+  document.getElementById('hudDebug').textContent      = s.debug ? 'on' : 'off';
+});
+
+// ── HELPERS ───────────────────────────────────────────────
+window.showPanel = function(name) {
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const nb = document.getElementById('nav-'+name); if(nb) nb.classList.add('active');
+  document.getElementById('topbarTitle').textContent = name.toUpperCase();
+  ({overview,tickets,users,channels,settings,logs,alerts,roles,mytickets,guide:guidePanel,applications:applicationsPanel,analytics})[name]?.();
+};
+window.doLogout  = async () => { await signOut(auth); sessionStorage.clear(); window.location.href='index.html'; };
+window.simRole   = r => { document.getElementById('hudSim').textContent = r||'—'; };
+
+function ts(n) { if(!n) return '—'; const d=typeof n==='object'&&n.seconds?new Date(n.seconds*1000):new Date(n); return d.toLocaleString(); }
+function closeModal() { document.getElementById('modalContainer').innerHTML=''; }
+function openModal(html, lg=false) {
+  document.getElementById('modalContainer').innerHTML =
+    `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+       <div class="modal${lg?' modal-lg':''}">${html}</div>
+     </div>`;
+}
+window.closeModal = closeModal;
+
+async function writeLog(action) {
+  await addDoc(collection(db,'logs'), { user:email, role:'Owner', action, timestamp:Date.now() });
+}
+
+function rolePill(r) {
+  const map  = { Owner:'pill-owner', Mod:'pill-mod', Staff:'pill-staff', User:'pill-user' };
+  const icons= { Owner:'👑 ', Mod:'🛡 ', Staff:'⚡ ', User:'' };
+  return `<span class="pill ${map[r]||'pill-user'}">${icons[r]||''}${r}</span>`;
+}
+
+// ── LOAD ASSIGNABLE USERS (for ticket assignment) ─────────
+async function loadAssignableUsers() {
+  const snap = await getDocs(collection(db,'users'));
+  // Owner can assign to anyone in the team
+  return snap.docs
+    .map(d => ({ uid:d.id, ...d.data() }))
+    .filter(u => ['Senior Mod','Mod','Staff'].includes(u.role))
+    .sort((a,b) => {
+      const order = {'Senior Mod':0,'Mod':1,'Staff':2};
+      if (order[a.role] !== order[b.role]) return order[a.role] - order[b.role];
+      return (a.username||a.email).localeCompare(b.username||b.email);
+    });
+}
+
+function buildAssignSelect(assignableUsers, currentAssigned) {
+  const roleLabel = u => u.role==='Senior Mod'?'✦ Senior Mod':u.role==='Mod'?'🛡 Mod':'⚡ Staff';
+  const opts = assignableUsers.map(u =>
+    `<option value="${u.email}" ${currentAssigned===u.email?'selected':''}>${u.username||u.email} [${roleLabel(u)}]</option>`
+  ).join('');
+  return `<select class="form-select" id="mAssign">
+    <option value="">Unassigned</option>
+    <option value="${email}" ${currentAssigned===email?'selected':''}>Myself [👑 Owner]</option>
+    ${opts}
+  </select>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// OVERVIEW
+// ══════════════════════════════════════════════════════════
+async function overview() {
+  document.getElementById('mainContent').innerHTML='<div class="empty">Loading...</div>';
+  const [uSnap,tSnap,lSnap,aSnap] = await Promise.all([
+    getDocs(collection(db,'users')),
+    getDocs(collection(db,'tickets')),
+    getDocs(query(collection(db,'logs'),orderBy('timestamp','desc'),limit(8))),
+    getDocs(query(collection(db,'channels','devalerts','messages'),orderBy('timestamp','desc'),limit(5))),
+  ]);
+  const users  = uSnap.docs.map(d=>d.data());
+  const staff  = users.filter(u=>u.role==='Staff').length;
+  const mods   = users.filter(u=>u.role==='Mod').length;
+  const open   = tSnap.docs.filter(d=>d.data().status==='open').length;
+  const logRows = lSnap.docs.map(d=>{const l=d.data();return`<div class="log-entry"><span class="log-time">${ts(l.timestamp)}</span><span class="log-user">${l.user||'—'}</span><span class="log-action">${l.action}</span></div>`;}).join('')||'<div class="empty">No logs</div>';
+  const alertRows = aSnap.docs.map(d=>{const a=d.data();return`<div class="alert-entry"><div class="alert-meta"><span class="alert-sender">${a.sender||'—'}</span><span class="alert-time">${ts(a.timestamp)}</span></div><div class="alert-text">${a.text||''}</div></div>`;}).join('')||'<div class="empty">No alerts</div>';
+  document.getElementById('mainContent').innerHTML=`
+  <div class="panel">
+    <div class="panel-title">System Overview</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value accent">${users.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Staff</div><div class="stat-value">${staff}</div></div>
+      <div class="stat-card"><div class="stat-label">Mods</div><div class="stat-value">${mods}</div></div>
+      <div class="stat-card"><div class="stat-label">Open Tickets</div><div class="stat-value">${open}</div></div>
+    </div>
+    <div class="grid-2">
+      <div><div class="section-header"><div class="section-title">Recent Logs</div></div><div class="card" style="padding:0">${logRows}</div></div>
+      <div><div class="section-header"><div class="section-title">Mod Alerts</div></div><div class="card" style="padding:0">${alertRows}</div></div>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// TICKETS
+// ══════════════════════════════════════════════════════════
+async function tickets() {
+  document.getElementById('mainContent').innerHTML='<div class="empty">Loading...</div>';
+  const snap = await getDocs(query(collection(db,'tickets'),orderBy('timestamp','desc')));
+  const rows = snap.docs.map(d => {
+    const t=d.data(); const id=d.id;
+    const sp = {open:'pill-open',in_progress:'pill-progress',closed:'pill-closed'}[t.status]||'pill-none';
+    const ep = {none:'pill-none',staff_to_mod:'pill-s2m',mod_to_senior:'pill-s2m',senior_to_owner:'pill-m2o'}[t.escalationLevel]||'pill-none';
+    const pp = t.priority==='high'?'<span style="font-family:var(--mono);font-size:9px;background:rgba(248,81,73,0.15);color:var(--danger);padding:1px 6px;border-radius:2px;margin-left:5px">HIGH</span>':t.priority==='medium'?'<span style="font-family:var(--mono);font-size:9px;background:rgba(210,153,34,0.15);color:var(--warn);padding:1px 6px;border-radius:2px;margin-left:5px">MED</span>':'';
+    return `<tr>
+      <td><span style="cursor:pointer;color:var(--text);font-weight:600" onclick="openTicket('${id}')">${t.subject||'—'}</span>${pp}</td>
+      <td class="mono" style="font-size:11px">${t.createdBy||'—'}</td>
+      <td><span class="pill ${sp}">${t.status||'—'}</span></td>
+      <td class="mono" style="font-size:11px">${t.assignedTo||'—'}</td>
+      <td><span class="pill ${ep}">${({'none':'None','staff_to_mod':'Staff→Mod','mod_to_senior':'Mod→Senior','senior_to_owner':'Senior→Owner'}[t.escalationLevel]||t.escalationLevel||'none')}</span></td>
+      <td class="mono" style="font-size:11px">${ts(t.timestamp)}</td>
+      <td>
+        <div class="flex-gap-sm">
+          <button class="btn btn-sm" onclick="openTicket('${id}')">Open</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteTicket('${id}')">Del</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="7"><div class="empty">No tickets</div></td></tr>';
+
+  document.getElementById('mainContent').innerHTML=`
+  <div class="panel">
+    <div class="section-header">
+      <div class="panel-title">Ticket Management</div>
+      <button class="btn btn-primary" onclick="newTicket()">+ New Ticket</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr>
+        <th>Subject</th><th>Created By</th><th>Status</th><th>Assigned To</th><th>Escalation</th><th>Created</th><th>Actions</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  </div>`;
+}
+
+window.newTicket = async function() {
+  const assignable = await loadAssignableUsers();
+  openModal(`
+    <div class="modal-title">New Ticket</div>
+    <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="mSubject"></div>
+    <div class="form-group"><label class="form-label">Message</label><textarea class="form-textarea" id="mMsg"></textarea></div>
+    <div class="form-group"><label class="form-label">Assign To</label>${buildAssignSelect(assignable,'')}</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewTicket()">Create</button>
+    </div>`);
+};
+
+window.saveNewTicket = async function() {
+  const subj = document.getElementById('mSubject').value.trim();
+  if (!subj) return;
+  await addDoc(collection(db,'tickets'), {
+    subject:subj, message:document.getElementById('mMsg').value.trim(),
+    createdBy:email, assignedTo:document.getElementById('mAssign').value||'',
+    status:'open', timestamp:Date.now(),
+    escalationLevel:'none', escalationReason:'', escalatedBy:''
+  });
+  await writeLog(`Created ticket: ${subj}`);
+  closeModal(); tickets();
+};
+
+// Open ticket in large modal with chat
+window.openTicket = async function(id) {
+  const snap = await getDoc(doc(db,'tickets',id));
+  if (!snap.exists()) return;
+  const t = snap.data();
+  const assignable = await loadAssignableUsers();
+  const sp = {open:'pill-open',in_progress:'pill-progress',closed:'pill-closed'}[t.status]||'pill-none';
+  const ep = {none:'pill-none',staff_to_mod:'pill-s2m',mod_to_senior:'pill-s2m',senior_to_owner:'pill-m2o'}[t.escalationLevel]||'pill-none';
+  const isAppeal = t.category === 'ban_appeal' || t.category === 'mute_appeal';
+  let appealUser = null;
+  if (isAppeal && t.createdByUid) {
+    const uSnap = await getDoc(doc(db,'users',t.createdByUid));
+    if (uSnap.exists()) appealUser = { uid: t.createdByUid, ...uSnap.data() };
+  }
+  const now = Date.now();
+  const isMuted = appealUser && appealUser.mutedUntil && (appealUser.mutedUntil.seconds ? appealUser.mutedUntil.seconds*1000 : new Date(appealUser.mutedUntil).getTime()) > now;
+  const isBanned = appealUser && (appealUser.banned || (appealUser.tempBannedUntil && (appealUser.tempBannedUntil.seconds ? appealUser.tempBannedUntil.seconds*1000 : new Date(appealUser.tempBannedUntil).getTime()) > now));
+
+  openModal(`
+    <div class="modal-title">Ticket: ${t.subject||'—'}</div>
+    <div class="grid-2" style="gap:16px;margin-bottom:16px">
+      <div>
+        <div class="form-group">
+          <div class="form-label">Status</div>
+          <select class="form-select" id="tStatus">
+            <option value="open"        ${t.status==='open'?'selected':''}>Open</option>
+            <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
+            <option value="closed"      ${t.status==='closed'?'selected':''}>Closed</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Assign To</div>
+          ${buildAssignSelect(assignable, t.assignedTo||'')}
+        </div>
+        <div class="form-group">
+          <div class="form-label">Escalation</div>
+          <select class="form-select" id="tEsc">
+            <option value="none"             ${t.escalationLevel==='none'?'selected':''}>None</option>
+            <option value="staff_to_mod"     ${t.escalationLevel==='staff_to_mod'?'selected':''}>Staff → Mod</option>
+            <option value="mod_to_senior"    ${t.escalationLevel==='mod_to_senior'?'selected':''}>Mod → Senior Mod</option>
+            <option value="senior_to_owner"  ${t.escalationLevel==='senior_to_owner'?'selected':''}>Senior Mod → Owner</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Escalation Reason</div>
+          <input class="form-input" id="tEscReason" value="${t.escalationReason||''}">
+        </div>
+      </div>
+      <div>
+        <div class="form-label" style="margin-bottom:8px">Details</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:4px">CREATED BY</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">${t.createdBy||'—'}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:4px">MESSAGE</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px">${t.message||'(no message)'}</div>
+      </div>
+    </div>
+
+    <div class="ticket-chat-wrap">
+      <div class="ticket-chat-header">💬 Ticket Chat</div>
+      <div class="ticket-chat-messages" id="tchatMessages">
+        <div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;text-align:center;padding:20px">Loading...</div>
+      </div>
+      <div class="ticket-chat-input">
+        <input id="tchatInput" placeholder="Message..." onkeydown="if(event.key==='Enter')sendTicketChat('${id}')">
+        <button onclick="sendTicketChat('${id}')">Send</button>
+      </div>
+    </div>
+
+    ${isAppeal ? `<div style="padding:12px 14px;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:8px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:var(--text-muted)">
+        ${t.category==='mute_appeal'?'🔇 Mute Appeal':'🚫 Ban Appeal'} —
+        <strong>${escHtml(t.createdByUsername||t.createdBy||'?')}</strong>
+        ${isMuted?' · <span style="color:var(--warn)">Currently Muted</span>':''}
+        ${isBanned?' · <span style="color:var(--danger)">Currently Banned</span>':''}
+        ${!isMuted&&!isBanned?' · <span style="color:var(--success)">No active punishment</span>':''}
+      </div>
+      <div style="display:flex;gap:8px">
+        ${isMuted?`<button class="btn" style="background:rgba(63,185,80,.15);border-color:rgba(63,185,80,.4);color:var(--success)" onclick="ownerAppealAction('${id}','unmute','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">✅ Unmute</button>`:''}
+        ${isBanned?`<button class="btn" style="background:rgba(63,185,80,.15);border-color:rgba(63,185,80,.4);color:var(--success)" onclick="ownerAppealAction('${id}','unban','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">✅ Unban</button>`:''}
+        <button class="btn" style="background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.3);color:var(--danger)" onclick="ownerAppealAction('${id}','deny','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">❌ Deny Appeal</button>
+      </div>
+    </div>` : ''}
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="closeTicket('${id}')">Close &amp; Delete Ticket</button>
+      <button class="btn btn-primary" onclick="saveTicket('${id}')">Save Changes</button>
+    </div>`, true);
+
+  // Load ticket chat
+  loadTicketChat(id);
+};
+
+function loadTicketChat(ticketId) {
+  const q = query(collection(db,'tickets',ticketId,'chat'), orderBy('timestamp','asc'));
+  const unsub = onSnapshot(q, snap => {
+    const el = document.getElementById('tchatMessages');
+    if (!el) { unsub(); return; }
+    if (!snap.docs.length) {
+      el.innerHTML = `<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;text-align:center;padding:20px">No messages yet</div>`;
+      return;
+    }
+    el.innerHTML = snap.docs.map(d => {
+      const m = d.data();
+      const r = m.senderRole||'User';
+      const cls = r==='Owner'?'avatar-owner':r==='Mod'?'avatar-mod':r==='Staff'?'avatar-staff':'avatar-user';
+      const col = r==='Owner'?'var(--gold)':r==='Mod'?'var(--info)':r==='Staff'?'var(--success)':'var(--text)';
+      return `<div class="tchat-msg">
+        <div class="tchat-avatar ${cls}">${(m.senderEmail||'?')[0].toUpperCase()}</div>
+        <div class="tchat-body">
+          <div class="tchat-meta">
+            <span class="tchat-author" style="color:${col}">${m.senderEmail||'—'}</span>
+            <span class="tchat-time">${ts(m.timestamp)}</span>
+          </div>
+          <div class="tchat-text">${escHtml(m.text||'')}</div>
+        </div>
+      </div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+window.sendTicketChat = async function(ticketId) {
+  const input = document.getElementById('tchatInput');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  await addDoc(collection(db,'tickets',ticketId,'chat'), {
+    text, senderUid:uid, senderEmail:email, senderRole:'Owner', timestamp:Date.now()
+  });
+  try { await updateDoc(doc(db,'tickets',ticketId), { lastStaffReply:Date.now() }); } catch(_) {}
+};
+
+window.saveTicket = async function(id) {
+  const data = {
+    status:           document.getElementById('tStatus').value,
+    assignedTo:       document.getElementById('mAssign').value||'',
+    escalationLevel:  document.getElementById('tEsc').value,
+    escalationReason: document.getElementById('tEscReason').value.trim(),
+  };
+  await updateDoc(doc(db,'tickets',id), data);
+  await writeLog(`Updated ticket ${id}`);
+  closeModal(); tickets();
+};
+
+window.ownerAppealAction = async function(ticketId, action, uid, username) {
+  if (!uid) { alert('Cannot find user.'); return; }
+  if (action === 'unmute') {
+    if (!confirm(`Unmute ${username}?`)) return;
+    await updateDoc(doc(db,'users',uid), { mutedUntil: null });
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'approved' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`✅ Appeal approved — ${username} has been unmuted by ${email}.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    await writeLog(`Appeal approved: unmuted ${username}`);
+    closeModal(); tickets();
+  } else if (action === 'unban') {
+    if (!confirm(`Unban ${username}?`)) return;
+    await updateDoc(doc(db,'users',uid), { banned:false, tempBannedUntil:null });
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'approved' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`✅ Appeal approved — ${username} has been unbanned by ${email}.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    await writeLog(`Appeal approved: unbanned ${username}`);
+    closeModal(); tickets();
+  } else if (action === 'deny') {
+    if (!confirm(`Deny ${username}'s appeal?`)) return;
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'denied' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`❌ Appeal denied — your punishment will remain. If you have further questions, please contact an Owner.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    await writeLog(`Appeal denied for ${username}`);
+    closeModal(); tickets();
+  }
+};
+
+window.closeTicket = async function(id) {
+  if (!confirm('Close and permanently delete this ticket and its chat?')) return;
+  // Delete chat subcollection messages
+  const chatSnap = await getDocs(collection(db,'tickets',id,'chat'));
+  for (const d of chatSnap.docs) await deleteDoc(d.ref);
+  await deleteDoc(doc(db,'tickets',id));
+  await writeLog(`Closed & deleted ticket ${id}`);
+  closeModal(); tickets();
+};
+
+window.deleteTicket = async function(id) {
+  if (!confirm('Delete this ticket?')) return;
+  const chatSnap = await getDocs(collection(db,'tickets',id,'chat'));
+  for (const d of chatSnap.docs) await deleteDoc(d.ref);
+  await deleteDoc(doc(db,'tickets',id));
+  await writeLog(`Deleted ticket ${id}`);
+  tickets();
+};
+
+// ══════════════════════════════════════════════════════════
+// USERS — full Owner punishment system
+// ══════════════════════════════════════════════════════════
+async function users() {
+  document.getElementById('mainContent').innerHTML='<div class="empty">Loading...</div>';
+  const snap = await getDocs(collection(db,'users'));
+  const rows = snap.docs.map(d => {
+    const u=d.data(); const uid2=d.id;
+    const uname = u.username||u.email||'—';
+    const now = Date.now();
+    const isTempBanned = u.tempBannedUntil && (u.tempBannedUntil.seconds ? u.tempBannedUntil.seconds*1000 : new Date(u.tempBannedUntil).getTime()) > now;
+    const isMuted = u.mutedUntil && (u.mutedUntil.seconds ? u.mutedUntil.seconds*1000 : new Date(u.mutedUntil).getTime()) > now;
+    let statusPill = '<span class="pill pill-none">Active</span>';
+    if (u.banned) statusPill = '<span class="pill pill-banned">Banned</span>';
+    else if (isTempBanned) statusPill = '<span class="pill pill-tempban">Temp Banned</span>';
+    else if (isMuted) statusPill = '<span class="pill pill-muted">Muted</span>';
+    const pfpHtml = u.pfp
+      ? `<img src="${u.pfp}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+      : `<div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-dim);flex-shrink:0">${uname[0].toUpperCase()}</div>`;
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">${pfpHtml}<div><div style="font-weight:600;font-size:13px">${escHtml(uname)}</div><div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">${u.email||''}</div></div></div></td>
+      <td>${rolePill(u.role||'User')}</td>
+      <td style="font-family:var(--mono)">${u.warningsCount||0}</td>
+      <td>${statusPill}</td>
+      <td><button class="btn btn-sm" onclick="manageUser('${uid2}')">Manage</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="5"><div class="empty">No users</div></td></tr>';
+
+  document.getElementById('mainContent').innerHTML=`
+  <div class="panel"><div class="panel-title">User Management</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>User</th><th>Role</th><th>Warnings</th><th>Status</th><th>Actions</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+window.manageUser = async function(uid2) {
+  const snap = await getDoc(doc(db,'users',uid2));
+  if (!snap.exists()) return;
+  const u = snap.data();
+  const uname = u.username||u.email||'—';
+  const now = Date.now();
+  const isTempBanned = u.tempBannedUntil && (u.tempBannedUntil.seconds?u.tempBannedUntil.seconds*1000:new Date(u.tempBannedUntil).getTime()) > now;
+  const isMuted = u.mutedUntil && (u.mutedUntil.seconds?u.mutedUntil.seconds*1000:new Date(u.mutedUntil).getTime()) > now;
+
+  // Punishment history
+  const history = (u.punishmentHistory||[]).slice(-8).reverse();
+  const histHtml = history.length
+    ? history.map(p=>`<div class="punish-item"><span class="punish-type text-warn">${p.type}</span><span style="color:var(--text-muted);font-size:12px">${p.reason||'—'}</span><span class="punish-date">${ts(p.at)}</span></div>`).join('')
+    : '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:8px">No history</div>';
+
+  openModal(`
+    <div class="modal-title">Manage: ${escHtml(uname)}</div>
+    <div class="grid-2" style="gap:16px;margin-bottom:16px">
+      <div>
+        <div class="form-group">
+          <div class="form-label">Role</div>
+          <select class="form-select" id="mRole">
+            <option value="User"       ${u.role==='User'?'selected':''}>User</option>
+            <option value="Staff"      ${u.role==='Staff'?'selected':''}>⚡ Staff</option>
+            <option value="Mod"        ${u.role==='Mod'?'selected':''}>🛡 Mod</option>
+            <option value="Senior Mod" ${u.role==='Senior Mod'?'selected':''}>🔰 Senior Mod</option>
+            <option value="Owner"      ${u.role==='Owner'?'selected':''}>👑 Owner</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Mute Duration</div>
+          <select class="form-select" id="mMuteDur">
+            <option value="">No mute</option>
+            <option value="3600000">1 hour</option>
+            <option value="7200000">2 hours</option>
+            <option value="10800000">3 hours</option>
+            <option value="21600000">6 hours</option>
+            <option value="86400000">24 hours</option>
+            <option value="604800000">7 days</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Temp Ban Duration</div>
+          <select class="form-select" id="mTempBan">
+            <option value="">No temp ban</option>
+            <option value="86400000">1 day</option>
+            <option value="259200000">3 days</option>
+            <option value="604800000">7 days</option>
+            <option value="1209600000">14 days</option>
+            <option value="2592000000">30 days</option>
+          </select>
+        </div>
+                    <div class="form-group">
+              <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+              <select class="form-select" id="mRuleSelect" onchange="
+                var sel=this;
+                var o=document.getElementById('mOtherWrap');
+                var btn=document.getElementById('mConfirmBtn');
+                if(sel.value==='other'){o.style.display='block';if(btn)btn.disabled=true;}
+                else{o.style.display='none';if(btn)btn.disabled=false;}
+                showRuleHint(sel.value,'owner');">
+                <option value="" disabled selected>Select a rule...</option>
+                <option value="01">01 — Be Respectful</option>
+                <option value="02">02 — No Spam</option>
+                <option value="03">03 — No NSFW Content</option>
+                <option value="04">04 — No Self-Promotion or Advertising</option>
+                <option value="05">05 — No Doxxing or Personal Info</option>
+                <option value="06">06 — Not Following Staff Instructions</option>
+                <option value="07">07 — Ban/Mute Evasion</option>
+                <option value="08">08 — English Only in General</option>
+                <option value="09">09 — Minimodding</option>
+                <option value="other">Other — please explain</option>
+              </select>
+            </div>
+            <div id="mOtherWrap" style="display:none" class="form-group">
+              <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+              <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:68px"
+                oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+            </div>
+            <div id="mRuleHint"></div>
+      </div>
+      <div>
+        <div class="form-label" style="margin-bottom:6px">Staff Notes <span style="color:var(--text-dim);font-size:9px">(private — not visible to users)</span></div>
+        <textarea class="form-textarea" id="mStaffNotes" placeholder="Private notes about this user..." style="min-height:60px;margin-bottom:12px">${escHtml(u.staffNotes||'')}</textarea>
+        <div class="form-label" style="margin-bottom:8px">Punishment History</div>
+        <div class="punish-list">${histHtml}</div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      ${u.warningsCount>0?`<button class="btn btn-success btn-sm" onclick="removeWarnings('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Remove Warnings (${u.warningsCount})</button>`:''}
+      ${isMuted?`<button class="btn btn-success btn-sm" onclick="unmute('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Unmute</button>`:''}
+      ${isTempBanned?`<button class="btn btn-success btn-sm" onclick="untempban('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Remove Temp Ban</button>`:''}
+      ${u.banned ? `<button class="btn btn-success btn-sm" onclick="unban('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Unban</button>` : `<button class="btn btn-danger btn-sm" onclick="closeModal();permBan('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Perm Ban</button>`}
+      <button class="btn btn-warn btn-sm" onclick="warnUser('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Warn</button>
+      <button class="btn btn-primary" onclick="saveUser('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Apply</button>
+    </div>`, true);
+};
+
+window.warnUser = function(uid2, uname) {
+  openModal(`<div class="modal-title">⚠️ Warn: ${uname}</div>
+    <div class="form-group">
+      <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+      <select class="form-select" id="mRuleSelect" onchange="
+        var o=document.getElementById('mOtherWrap');
+        var btn=document.getElementById('mConfirmBtn');
+        if(this.value==='other'){o.style.display='block';btn&&(btn.disabled=true);}
+        else{o.style.display='none';btn&&(btn.disabled=false);}
+        showRuleHint(this.value,'owner');
+      " required>
+        <option value="" disabled selected>Select a rule...</option>
+        <option value="01: Be Respectful">01 — Be Respectful</option>
+        <option value="02: No Spam">02 — No Spam</option>
+        <option value="03: No NSFW Content">03 — No NSFW Content</option>
+        <option value="04: No Self-Promotion or Advertising">04 — No Self-Promotion or Advertising</option>
+        <option value="05: No Doxxing or Personal Info">05 — No Doxxing or Personal Info</option>
+        <option value="06: Not Following Staff Instructions">06 — Not Following Staff Instructions</option>
+        <option value="07: Ban/Mute Evasion">07 — Ban/Mute Evasion</option>
+        <option value="08: English Only in General">08 — English Only in General</option>
+        <option value="09: Minimodding">09 — Minimodding</option>
+        <option value="other">Other — please explain</option>
+      </select>
+    </div>
+    <div id="mOtherWrap" style="display:none" class="form-group">
+      <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+      <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:72px"
+        oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+    </div>
+    <div id="mRuleHint"></div>    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-warn" id="mConfirmBtn" disabled onclick="confirmWarn('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Issue Warning</button>
+    </div>`);
+};
+
+window.confirmWarn = async function(uid2, uname) {
+  const reason = getModReason(); if(!reason) return;
+  const snap = await getDoc(doc(db,'users',uid2));
+  const cnt = (snap.data().warningsCount||0)+1;
+  await updateDoc(doc(db,'users',uid2), {
+    warningsCount: cnt,
+    punishmentHistory: arrayUnion({ type:'Warn', reason, at:Date.now() }),
+    pendingNotifications: arrayUnion({ type:'Warn', reason, issuedBy:email, at:Date.now() })
+  });
+  await writeLog(`Warned ${uname} — ${reason} (total: ${cnt})`);
+  closeModal(); users();
+};
+
+
+
+
+
+// ── EMAIL ALERTS ─────────────────────────────────────────
+const EMAILJS_SERVICE  = 'service_mtcu1qo';
+const EMAILJS_TEMPLATE = 'template_6qgxi0f';
+const EMAILJS_KEY      = 'G7xmtT6VrVzxi1rfJ';
+const ALERT_EMAILS     = ['rhys.doughty@pgs.vic.edu.au','rhys97337@gmail.com'];
+async function sendAlert(subject, body) {
+  console.log('sendAlert called:', subject);
+  if(!window.emailjs){console.warn('EmailJS not loaded');return;}
+  const alerts = [
+    { service:'service_mtcu1qo', email:'rhys.doughty@pgs.vic.edu.au' },
+    { service:'service_mtcu1qo',  email:'rhys97337@gmail.com' },
+  ];
+  for(const a of alerts){
+    emailjs.send(a.service, 'template_6qgxi0f', {
+      to_email:   a.email,
+      subject:    '🚨 NOVA Alert: ' + subject,
+      body:       body + '\n\n---\nSent from NOVA at ' + new Date().toLocaleString(),
+      from_name:  'NOVA Security'
+    }, 'G7xmtT6VrVzxi1rfJ').catch(e=>console.warn('Alert failed for '+a.email, e));
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════
+// APPLICATIONS
+// ══════════════════════════════════════════════════════════
+async function applicationsPanel() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  try {
+    const snap = await getDocs(query(collection(db,'applications'), orderBy('timestamp','desc')));
+    if(!snap.size){
+      document.getElementById('mainContent').innerHTML = '<div class="panel"><div class="panel-title">📝 Staff Applications</div><div class="empty">No applications yet.</div></div>';
+      return;
+    }
+    const cards = snap.docs.map(d => {
+      const a = d.data(); const aid = d.id;
+      const statusCol = a.status==='accepted'?'var(--success)':a.status==='rejected'?'var(--danger)':'var(--warn)';
+      const statusLabel = a.status==='accepted'?'✅ Accepted':a.status==='rejected'?'❌ Rejected':'⏳ Pending';
+      return `<div class="card" style="margin-bottom:14px;padding:16px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:14px;font-weight:700">${escHtml(a.username||a.email||'?')}</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">${escHtml(a.email||'')}</span>
+            ${a.wasStaff?`<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--warn);background:rgba(210,153,34,.15);border:1px solid rgba(210,153,34,.3);padding:2px 8px;border-radius:8px">⚠ Previously removed from staff</span>`:''}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:var(--mono);font-size:10px;color:${statusCol}">${statusLabel}</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">${ts(a.timestamp)}</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+          <div><div class="form-label" style="font-size:8px;margin-bottom:2px">Age</div><div style="font-size:13px">${escHtml(a.age||'—')}</div></div>
+          <div><div class="form-label" style="font-size:8px;margin-bottom:2px">Timezone</div><div style="font-size:13px">${escHtml(a.timezone||'—')}</div></div>
+          <div><div class="form-label" style="font-size:8px;margin-bottom:2px">Activity</div><div style="font-size:13px">${escHtml(a.activity||'—')}</div></div>
+        </div>
+        <div style="margin-bottom:10px"><div class="form-label" style="font-size:8px;margin-bottom:4px">Why they want to join</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6;background:var(--surface2);padding:8px 10px;border-radius:6px;border:1px solid var(--border)">${escHtml(a.why||'—')}</div></div>
+        <div style="margin-bottom:10px"><div class="form-label" style="font-size:8px;margin-bottom:4px">Experience</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6;background:var(--surface2);padding:8px 10px;border-radius:6px;border:1px solid var(--border)">${escHtml(a.experience||'—')}</div></div>
+        ${a.scenario?`<div style="margin-bottom:10px"><div class="form-label" style="font-size:8px;margin-bottom:4px">Scenario response</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6;background:var(--surface2);padding:8px 10px;border-radius:6px;border:1px solid var(--border)">${escHtml(a.scenario)}</div></div>`:''}
+        ${a.extra?`<div style="margin-bottom:10px"><div class="form-label" style="font-size:8px;margin-bottom:4px">Additional info</div>
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6;background:var(--surface2);padding:8px 10px;border-radius:6px;border:1px solid var(--border)">${escHtml(a.extra)}</div></div>`:''}
+        ${a.status==='pending'?`<div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn" style="background:rgba(63,185,80,.15);border-color:rgba(63,185,80,.4);color:var(--success)" onclick="ownerReviewApp('${aid}','accepted','${escHtml(a.uid||'')}','${escHtml(a.username||'')}')">✅ Accept</button>
+          <button class="btn" style="background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.3);color:var(--danger)" onclick="ownerReviewApp('${aid}','rejected','${escHtml(a.uid||'')}','${escHtml(a.username||'')}')">❌ Reject</button>
+        </div>`:`<div style="font-family:var(--mono);font-size:9px;color:var(--text-dim)">Reviewed by ${escHtml(a.reviewedBy||'?')} · ${ts(a.reviewedAt)}</div>`}
+      </div>`;
+    }).join('');
+    document.getElementById('mainContent').innerHTML = `
+    <div class="panel">
+      <div class="section-header"><div class="panel-title">📝 Staff Applications</div></div>
+      ${cards}
+    </div>`;
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML = `<div class="panel"><div class="empty">Error: ${e.message}</div></div>`;
+  }
+}
+
+window.ownerReviewApp = async function(aid, status, uid, username) {
+  await updateDoc(doc(db,'applications',aid), {status, reviewedBy:email, reviewedAt:Date.now()});
+  if(status==='accepted' && uid) {
+    await updateDoc(doc(db,'users',uid), {role:'Staff'});
+    // Welcome message in #staff channel
+    await addDoc(collection(db,'channels','staff','messages'),{
+      text:`⚡ Welcome to the team, @${username}!\n\nYour staff application has been accepted. You now have access to the Staff Dashboard where you can manage tickets, warn and mute users, and escalate issues to Mods.\n\nIf you have any questions reach out to a Mod or the Owner. Welcome aboard! — NOVA Team`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',
+      timestamp:Date.now(),system:true,
+    });
+    await addDoc(collection(db,'tickets'),{
+      subject:'Staff Application Accepted 🎉',
+      message:`Congratulations ${username}! Your staff application has been accepted. Welcome to the NOVA team! Head over to #staff to get started.`,
+      priority:'high',category:'general',
+      createdBy:email,createdByUid:'owner',createdByUsername:'NOVA Team',
+      assignedTo:'',status:'open',timestamp:Date.now(),
+      escalationLevel:'none',escalationReason:'',escalatedBy:''
+    });
+    await writeLog(`Accepted staff application: ${username}`);
+  } else {
+    if(uid) await addDoc(collection(db,'tickets'),{
+      subject:'Staff Application Update',
+      message:`Thank you for applying to NOVA Staff. After careful consideration, we won't be moving forward with your application at this time. You're welcome to apply again in the future.`,
+      priority:'low',category:'general',
+      createdBy:email,createdByUid:'owner',createdByUsername:'NOVA Team',
+      assignedTo:'',status:'open',timestamp:Date.now(),
+      escalationLevel:'none',escalationReason:'',escalatedBy:''
+    });
+    await writeLog(`Rejected staff application: ${username}`);
+  }
+  applicationsPanel();
+};
+
+
+const PUNISHMENT_GUIDE = {
+  "01": { label:"Be Respectful", rows:[
+    { sev:"low",      eg:"Minor rude comment",              staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Targeted insults / harassment",   staff:"Warn + Mute 1h",             mod:"Warn + Mute 2h" },
+    { sev:"high",     eg:"Sustained hate speech / slurs",   staff:"Alert Mod ⚠",                mod:"Temp Ban 3d" },
+  ]},
+  "02": { label:"No Spam", rows:[
+    { sev:"low",      eg:"Repeated messages",               staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Flooding a channel",              staff:"Mute 1h",                    mod:"Mute 2h + Warn" },
+    { sev:"high",     eg:"Bot spam / raid",                 staff:"Alert Mod ⚠",                mod:"Temp Ban 7d" },
+  ]},
+  "03": { label:"No NSFW Content", rows:[
+    { sev:"medium",   eg:"Inappropriate image or link",     staff:"Warn",                       mod:"Warn + Mute 6h" },
+    { sev:"high",     eg:"Explicit content",                staff:"Alert Mod ⚠",                mod:"Temp Ban 7d" },
+    { sev:"critical", eg:"CSAM or illegal content",         staff:"Alert Owner 🚨",              mod:"Perm Ban + log" },
+  ]},
+  "04": { label:"No Advertising", rows:[
+    { sev:"low",      eg:"Casual mention of own project",   staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Posting invite links or ads",     staff:"Warn + Mute 1h",             mod:"Mute 3h + Warn" },
+    { sev:"high",     eg:"Repeated or scam links",          staff:"Alert Mod ⚠",                mod:"Temp Ban 3d" },
+  ]},
+  "05": { label:"No Doxxing", rows:[
+    { sev:"high",     eg:"Sharing someone's private info",  staff:"Alert Mod ⚠",                mod:"Temp Ban 14d" },
+    { sev:"critical", eg:"Coordinated doxxing or threats",  staff:"Alert Mod ⚠",                mod:"Perm Ban" },
+  ]},
+  "06": { label:"Not Following Staff", rows:[
+    { sev:"low",      eg:"Ignored one warning",             staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Repeatedly ignoring staff",       staff:"Mute 1h",                    mod:"Mute 3h + Warn" },
+    { sev:"high",     eg:"Openly defying moderation",       staff:"Alert Mod ⚠",                mod:"Temp Ban 1d" },
+  ]},
+  "07": { label:"Ban / Mute Evasion", rows:[
+    { sev:"high",     eg:"Alt account while muted",         staff:"Alert Mod ⚠",                mod:"Temp Ban 7d (both accounts)" },
+    { sev:"critical", eg:"Alt account while banned",        staff:"Alert Mod ⚠",                mod:"Perm Ban all accounts" },
+  ]},
+  "08": { label:"English Only in General", rows:[
+    { sev:"low",      eg:"Occasional non-English",          staff:"Remind",                     mod:"Remind" },
+    { sev:"medium",   eg:"Repeatedly ignoring reminder",    staff:"Warn",                       mod:"Warn + Mute 1h" },
+  ]},
+  "09": { label:"Minimodding", rows:[
+    { sev:"low",      eg:"Casually calling out users",      staff:"Remind",                     mod:"Remind" },
+    { sev:"medium",   eg:"Issuing fake warnings publicly",  staff:"Warn",                       mod:"Warn" },
+  ]},
+  "__hacking__": { label:"Hacking / Exploiting", rows:[
+    { sev:"critical", eg:"Exploiting platform code or bugs",staff:"Perm Ban + Alert Owner 🚨",  mod:"Perm Ban + Alert Owner 🚨" },
+    { sev:"critical", eg:"Attempting to compromise accounts",staff:"Perm Ban + Alert Owner 🚨", mod:"Perm Ban + Alert Owner 🚨" },
+  ]},
+};
+
+const SEV_CFG = {
+  low:      { col:"#3fb950", bg:"rgba(63,185,80,.12)",    label:"Low" },
+  medium:   { col:"#d29922", bg:"rgba(210,153,34,.12)",   label:"Medium" },
+  high:     { col:"#f85149", bg:"rgba(248,81,73,.12)",    label:"High" },
+  critical: { col:"#e040fb", bg:"rgba(224,64,251,.1)",    label:"Critical" },
+};
+
+function getModReason() {
+  const sel = document.getElementById('mRuleSelect');
+  if (!sel || !sel.value) { alert('Please select a rule before continuing.'); return null; }
+  if (sel.value === 'other') {
+    const txt = (document.getElementById('mOtherText')?.value||'').trim();
+    if (txt.length < 3) { alert('Please describe the reason (at least 3 characters).'); return null; }
+    return 'Other: ' + txt;
+  }
+  const guide = PUNISHMENT_GUIDE[sel.value];
+  return (guide ? guide.label : sel.value);
+}
+
+window.showRuleHint = function showRuleHint(val, role) {
+  const wrap = document.getElementById('mRuleHint');
+  if (!wrap) return;
+  if (!val || val === 'other') { wrap.innerHTML = ''; return; }
+  const guide = PUNISHMENT_GUIDE[val];
+  if (!guide) { wrap.innerHTML = ''; return; }
+  const rows = guide.rows.map(r => {
+    const s = SEV_CFG[r.sev] || SEV_CFG.low;
+    const action = role === 'staff' ? r.staff : r.mod;
+    const isOwner = action.includes('Owner');
+    const isMod   = action.includes('Mod');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:700;color:${s.col};background:${s.bg};padding:2px 8px;border-radius:8px;font-family:var(--mono);flex-shrink:0;min-width:62px;text-align:center">${s.label}</span>
+      <span style="font-size:11px;color:var(--text-muted);flex:1;line-height:1.4">${r.eg}</span>
+      <span style="font-size:11px;font-weight:700;flex-shrink:0;color:${isOwner?'#e040fb':isMod?'#d29922':'var(--text)'}">${action}</span>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+    <div style="font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Rule: ${guide.label}</div>
+    <div style="border-top:1px solid var(--border)">${rows}</div>
+  </div>`;
+}
+
+function renderGuide(containerId, role) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const keys = ["01","02","03","04","05","06","07","08","09","__hacking__"];
+  wrap.innerHTML = keys.map(key => {
+    const rule = PUNISHMENT_GUIDE[key];
+    if (!rule) return '';
+    const isHack = key === '__hacking__';
+    const rowsHtml = rule.rows.map(r => {
+      const s = SEV_CFG[r.sev] || SEV_CFG.low;
+      const action = role === 'staff' ? r.staff : r.mod;
+      const isOwner = action.includes('Owner');
+      const isMod   = action.includes('Mod');
+      return `<tr>
+        <td style="padding:7px 12px;width:90px"><span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${s.bg};color:${s.col};font-family:var(--mono)">${s.label}</span></td>
+        <td style="padding:7px 12px;font-size:12px;color:var(--text-muted)">${r.eg}</td>
+        <td style="padding:7px 12px;font-size:12px;font-weight:600;color:${isOwner?'#e040fb':isMod?'#d29922':'var(--text)'}">${action}</td>
+      </tr>`;
+    }).join('');
+    return `<div style="background:var(--surface1);border:1px solid ${isHack?'rgba(224,64,251,.3)':'var(--border)'};border-radius:10px;margin-bottom:12px;overflow:hidden">
+      <div style="padding:10px 14px;background:${isHack?'rgba(224,64,251,.06)':'var(--surface2)'};border-bottom:1px solid ${isHack?'rgba(224,64,251,.2)':'var(--border)'};display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:700">${isHack?'🚨 ':''} ${rule.label}</span>
+        ${isHack?'<span style="margin-left:auto;font-family:var(--mono);font-size:9px;color:#e040fb;background:rgba(224,64,251,.1);border:1px solid rgba(224,64,251,.3);padding:2px 8px;border-radius:10px">ALERT OWNER IMMEDIATELY</span>':''}
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600">SEVERITY</th>
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600">EXAMPLE</th>
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600;width:180px">ACTION</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+
+
+function guidePanel() {
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="panel-title">📋 Punishment Guide</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">
+      Reference for all punishments. <span style="color:#e040fb;font-weight:600">Critical / hacking</span> requires immediate Owner action.
+    </div>
+    <div id="guideContent"></div>
+  </div>`;
+  renderGuide('guideContent', 'mod');
+}
+window.removeWarnings = async function(uid2, uname) {
+  await updateDoc(doc(db,'users',uid2), { warningsCount:0 });
+  await writeLog(`Removed all warnings for ${uname}`);
+  closeModal(); users();
+};
+
+window.unmute = async function(uid2, uname) {
+  await updateDoc(doc(db,'users',uid2), { mutedUntil:null });
+  await writeLog(`Unmuted ${uname}`);
+  closeModal(); users();
+};
+
+window.untempban = async function(uid2, uname) {
+  await updateDoc(doc(db,'users',uid2), { tempBannedUntil:null });
+  await writeLog(`Removed temp ban for ${uname}`);
+  closeModal(); users();
+};
+
+window.permBan = function(uid2, uname) {
+  openModal(`<div class="modal-title" style="color:var(--danger)">⛔ Perm Ban: ${uname}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">This is permanent. You can unban from the user panel.</div>
+    <div class="form-group">
+      <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+      <select class="form-select" id="mRuleSelect" onchange="
+        var o=document.getElementById('mOtherWrap');
+        var btn=document.getElementById('mConfirmBtn');
+        if(this.value==='other'){o.style.display='block';btn&&(btn.disabled=true);}
+        else{o.style.display='none';btn&&(btn.disabled=false);}
+        showRuleHint(this.value,'owner');
+      " required>
+        <option value="" disabled selected>Select a rule...</option>
+        <option value="01: Be Respectful">01 — Be Respectful</option>
+        <option value="02: No Spam">02 — No Spam</option>
+        <option value="03: No NSFW Content">03 — No NSFW Content</option>
+        <option value="04: No Self-Promotion or Advertising">04 — No Self-Promotion or Advertising</option>
+        <option value="05: No Doxxing or Personal Info">05 — No Doxxing or Personal Info</option>
+        <option value="06: Not Following Staff Instructions">06 — Not Following Staff Instructions</option>
+        <option value="07: Ban/Mute Evasion">07 — Ban/Mute Evasion</option>
+        <option value="08: English Only in General">08 — English Only in General</option>
+        <option value="09: Minimodding">09 — Minimodding</option>
+        <option value="other">Other — please explain</option>
+      </select>
+    </div>
+    <div id="mOtherWrap" style="display:none" class="form-group">
+      <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+      <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:72px"
+        oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+    </div>
+    <div id="mRuleHint"></div>    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" id="mConfirmBtn" disabled onclick="confirmPermBan('${uid2}',this.dataset.uname)" data-uname="${escAttr(uname)}">Permanently Ban</button>
+    </div>`);
+};
+window.confirmPermBan = async function(uid2, uname) {
+  const reason = getModReason(); if(!reason) return;
+  await updateDoc(doc(db,'users',uid2), {
+    banned:true,
+    punishmentHistory: arrayUnion({ type:'Perm Ban', reason, at:Date.now() }),
+    pendingNotifications: arrayUnion({ type:'Perm Ban', reason, issuedBy:email, at:Date.now() })
+  });
+  await writeLog(`Permanently banned ${uname} — ${reason}`);
+  closeModal(); users();
+};
+
+window.unban = async function(uid2, uname) {
+  await updateDoc(doc(db,'users',uid2), { banned:false });
+  await writeLog(`Unbanned ${uname}`);
+  closeModal(); users();
+};
+
+window.saveUser = async function(uid2, uname) {
+  const newRole  = document.getElementById('mRole').value;
+  const muteDur  = document.getElementById('mMuteDur').value;
+  const tempDur  = document.getElementById('mTempBan').value;
+  const mutingOrBanning = muteDur || tempDur;
+  const issuedBy = email || uid || 'Owner';
+  const reason   = (()=>{
+    const sel=document.getElementById('mRuleSelect');if(!sel||!sel.value)return'';
+    if(sel.value==='other'){const t=document.getElementById('mOtherText')?.value.trim();return t?'Other: '+t:'';}
+    return sel.value;
+  })();
+  if (mutingOrBanning && !reason) { alert('Please select a rule broken before applying a mute or temp ban.'); return; }
+  const staffNotes = document.getElementById('mStaffNotes')?.value.trim()??'';
+  const updates  = { role: newRole, staffNotes };
+  // If demoting from a staff role, record it
+  if(newRole && !['Staff','Mod','Senior Mod'].includes(newRole)){
+    const prevSnap=await getDoc(doc(db,'users',uid2));
+    const prevRole=prevSnap.exists()?prevSnap.data().role:'';
+    if(['Staff','Mod','Senior Mod'].includes(prevRole)) updates.previousRoles=arrayUnion(prevRole);
+  }
+  const history  = [];
+  if (muteDur) {
+    const muteUntil = Date.now()+parseInt(muteDur);
+    updates.mutedUntil = new Date(muteUntil);
+    history.push({ type:'Mute', reason, at:Date.now() });
+    updates.pendingNotifications = arrayUnion({ type:'Mute', reason, until:muteUntil, issuedBy:issuedBy, at:Date.now() });
+  }
+  if (tempDur) {
+    updates.tempBannedUntil = new Date(Date.now()+parseInt(tempDur));
+    history.push({ type:'Temp Ban', reason, at:Date.now() });
+  }
+  if (history.length) updates.punishmentHistory = arrayUnion(...history);
+  await updateDoc(doc(db,'users',uid2), updates);
+  await writeLog(`Updated user ${uname}: role=${newRole}`);
+
+  // Post welcome message when promoted to Staff or Mod
+  if (newRole === 'Staff' || newRole === 'Mod') {
+    const chanId  = newRole === 'Staff' ? 'staff' : 'mod';
+    const icon    = newRole === 'Staff' ? '⚡' : '🛡';
+    const roleMsg = newRole === 'Staff'
+      ? 'You now have access to the Staff Dashboard where you can manage tickets, warn and mute users, and escalate issues to Mods.'
+      : 'You now have access to the Mod Dashboard with full moderation tools, ticket management, and team alerts.';
+    const welcomeText = icon + ' Welcome to the team, @' + uname + '!\n\n' + roleMsg + '\n\nIf you have any questions reach out to the Owner or a senior team member. Welcome aboard! — NOVA Team';
+    await addDoc(collection(db,'channels',chanId,'messages'), {
+      text: welcomeText,
+      senderUid:'system', senderEmail:'NOVA System',
+      senderUsername:'NOVA System', senderRole:'System',
+      timestamp:Date.now(), system:true,
+    });
+  }
+
+  closeModal(); users();
+};
+
+// ══════════════════════════════════════════════════════════
+// CHANNELS
+// ══════════════════════════════════════════════════════════
+async function channels() {
+  document.getElementById('mainContent').innerHTML='<div class="empty">Loading...</div>';
+  const snap = await getDocs(collection(db,'channels'));
+  const rows = snap.docs.map(d=>{
+    const c=d.data(); const cid=d.id;
+    const icon=c.icon||'#';
+    return `<tr>
+      <td><span style="font-size:16px;margin-right:7px">${icon}</span><span class="mono">${c.name||cid}</span></td>
+      <td>${c.restricted?'<span class="pill pill-mod">Restricted</span>':'<span class="pill pill-open">Public</span>'}</td>
+      <td>${c.readonly?'<span class="pill pill-progress">Read-only</span>':'<span class="pill pill-none">Normal</span>'}</td>
+      <td class="mono" style="font-size:11px">${ts(c.createdAt)}</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="editChannel('${cid}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteChannel('${cid}','${c.name||cid}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="5"><div class="empty">No channels</div></td></tr>';
+  document.getElementById('mainContent').innerHTML=`
+  <div class="panel">
+    <div class="section-header"><div class="panel-title">Channels</div><button class="btn btn-primary" onclick="newChannel()">+ New Channel</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Access</th><th>Type</th><th>Created</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+const CHAN_EMOJIS = ['#','📢','🎮','🎨','🎵','📸','💬','📌','🔊','⚡','🛡','📋','🌟','🔥','💡','🏆','🎯','📣','🌐','🔧','🎲','👾','🚀','💎','🎬','📖','🤝','🌈','⚗️','🗺️'];
+
+function chanModalHtml(title, confirmFn, data={}) {
+  const emojiOpts = CHAN_EMOJIS.map(e =>
+    `<div onclick="pickChanEmoji('${e}')" style="font-size:20px;padding:5px;border-radius:6px;cursor:pointer;text-align:center;border:2px solid ${(data.icon||'#')===e?'var(--accent)':'transparent'};background:${(data.icon||'#')===e?'var(--gl2)':'transparent'}" title="${e}">${e}</div>`
+  ).join('');
+  return `
+  <div class="modal-title">${title}</div>
+  <div class="form-group">
+    <label class="form-label">Channel Icon</label>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div id="chanIconPreview" style="font-size:28px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px">${data.icon||'#'}</div>
+      <span style="font-size:12px;color:var(--text-muted)">Select an icon below</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:120px;overflow-y:auto" id="emojiGrid">
+      ${emojiOpts}
+    </div>
+    <input type="hidden" id="mChanIcon" value="${data.icon||'#'}">
+  </div>
+  <div class="form-group"><label class="form-label">Channel Name</label><input class="form-input" id="mChanName" value="${data.name||''}" placeholder="e.g. general"></div>
+  <div class="form-group"><label class="form-label">Description</label><input class="form-input" id="mChanDesc" value="${data.desc||''}" placeholder="What's this channel for?"></div>
+  <div class="form-group" style="display:flex;gap:20px">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="mChanRestricted" ${data.restricted?'checked':''}> <span class="form-label" style="margin:0">Staff+ Only</span></label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="mChanReadonly" ${data.readonly?'checked':''}> <span class="form-label" style="margin:0">Read Only</span></label>
+  </div>
+  <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="${confirmFn}">Save</button></div>`;
+}
+
+window.pickChanEmoji = function(e) {
+  document.getElementById('mChanIcon').value = e;
+  document.getElementById('chanIconPreview').textContent = e;
+  document.querySelectorAll('#emojiGrid div').forEach(d => {
+    const isSelected = d.title === e;
+    d.style.borderColor = isSelected ? 'var(--accent)' : 'transparent';
+    d.style.background = isSelected ? 'var(--gl2)' : 'transparent';
+  });
+};
+
+window.newChannel = () => openModal(chanModalHtml('Create Channel', 'saveChannel()'));
+
+window.saveChannel = async () => {
+  const name = document.getElementById('mChanName').value.trim(); if(!name){alert('Channel name required.');return;}
+  const icon = document.getElementById('mChanIcon').value || '#';
+  await addDoc(collection(db,'channels'),{
+    name, icon,
+    desc: document.getElementById('mChanDesc').value.trim(),
+    restricted: document.getElementById('mChanRestricted').checked,
+    readonly: document.getElementById('mChanReadonly').checked,
+    createdAt: Date.now()
+  });
+  await writeLog(`Created channel: ${icon} ${name}`); closeModal(); channels();
+};
+
+window.editChannel = async (id) => {
+  const snap = await getDoc(doc(db,'channels',id));
+  if(!snap.exists()) return;
+  const data = snap.data();
+  openModal(chanModalHtml('Edit Channel', `updateChannel('${id}')`, data));
+};
+
+window.updateChannel = async (id) => {
+  const name = document.getElementById('mChanName').value.trim(); if(!name){alert('Channel name required.');return;}
+  const icon = document.getElementById('mChanIcon').value || '#';
+  await updateDoc(doc(db,'channels',id),{
+    name, icon,
+    desc: document.getElementById('mChanDesc').value.trim(),
+    restricted: document.getElementById('mChanRestricted').checked,
+    readonly: document.getElementById('mChanReadonly').checked,
+  });
+  await writeLog(`Updated channel: ${icon} ${name}`); closeModal(); channels();
+};
+
+window.deleteChannel = async (id,name) => {
+  if(!confirm(`Delete channel "${name}"?`))return;
+  await deleteDoc(doc(db,'channels',id)); await writeLog(`Deleted channel: ${name}`); channels();
+};
+
+
+// ══════════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════════
+async function settings() {
+  const snap=await getDoc(doc(db,'settings','global'));
+  const s=snap.exists()?snap.data():{};
+  document.getElementById('mainContent').innerHTML=`
+  <div class="panel"><div class="panel-title">System Settings</div>
+    <div class="card">
+      <div class="toggle-row"><div><div class="toggle-label">Maintenance Mode</div><div class="toggle-desc">Blocks all users below Senior Mod from accessing chat.</div></div><label class="toggle"><input type="checkbox" ${s.maintenance?'checked':''} onchange="saveSetting('maintenance',this.checked)"><span class="toggle-slider"></span></label></div>
+      <div class="toggle-row"><div><div class="toggle-label">Debug Mode</div><div class="toggle-desc">Requires maintenance mode.</div></div><label class="toggle"><input type="checkbox" ${s.debug?'checked':''} ${!s.maintenance?'disabled':''} onchange="saveSetting('debug',this.checked)"><span class="toggle-slider"></span></label></div>
+      <div class="toggle-row"><div><div class="toggle-label">Force WebRTC Fallback</div><div class="toggle-desc">Disables Agora, uses WebRTC (6 person cap).</div></div><label class="toggle"><input type="checkbox" ${s.voiceMode==='webrtc'?'checked':''} onchange="saveSetting('voiceMode',this.checked?'webrtc':'agora')"><span class="toggle-slider"></span></label></div>
+      <div class="toggle-row"><div><div class="toggle-label">🕹 Disable Arcade</div><div class="toggle-desc">Blocks all users from accessing the arcade.</div></div><label class="toggle"><input type="checkbox" ${s.arcadeDisabled?'checked':''} onchange="saveSetting('arcadeDisabled',this.checked)"><span class="toggle-slider"></span></label></div>
+      <div class="toggle-row"><div><div class="toggle-label">📝 Close Applications</div><div class="toggle-desc">Stops users from submitting new staff applications.</div></div><label class="toggle"><input type="checkbox" ${s.applicationsClosed?'checked':''} onchange="saveSetting('applicationsClosed',this.checked)"><span class="toggle-slider"></span></label></div>
+      <div class="toggle-row" style="border:1px solid rgba(248,81,73,.2);border-radius:8px;padding:10px 12px;background:rgba(248,81,73,.04)"><div><div class="toggle-label" style="color:var(--danger)">🔒 Emergency Lockdown</div><div class="toggle-desc">Blocks everyone except Owner and Senior Mods. Sends an email alert when triggered.</div></div><label class="toggle"><input type="checkbox" ${s.emergency?'checked':''} onchange="toggleLockdown(this.checked)"><span class="toggle-slider"></span></label></div>
+    </div>
+    <div class="mb-20"></div>
+    <div class="card">
+      <div class="form-group"><label class="form-label">Maintenance Message</label><input class="form-input" id="sMaintMsg" value="${s.maintenanceMessage||''}"></div>
+      <div class="form-group"><label class="form-label">Lockdown Message</label><input class="form-input" id="sEmergMsg" value="${s.emergencyMessage||'🔒 The server is currently in lockdown. Please wait for staff to resolve the situation.'}"></div>
+      <button class="btn btn-primary" onclick="saveMessages()">Save Messages</button>
+    </div>
+  </div>`;
+}
+window.toggleLockdown = async function(on) {
+  if(on){
+    await setDoc(doc(db,'settings','global'),{
+      emergency:true,
+      emergencyMessage:'🔒 Server is in lockdown. Please wait for staff to resolve the situation.',
+      lockdownTriggeredBy:email,lockdownAt:Date.now()
+    },{merge:true});
+    await writeLog('Triggered EMERGENCY LOCKDOWN');
+    sendAlert('Emergency Lockdown Activated','NOVA Emergency Lockdown was activated.\n\n• By: '+email+'\n• Time: '+new Date().toLocaleString()+'\n\nOnly Owner and Senior Mods can access NOVA.');
+  } else {
+    await setDoc(doc(db,'settings','global'),{emergency:false,lockdownTriggeredBy:'',lockdownAt:0},{merge:true});
+    await writeLog('Lifted EMERGENCY LOCKDOWN');
+  }
+  settings();
+};
+window.saveSetting = async (key,val) => {
+  if(key==='debug'){const s=await getDoc(doc(db,'settings','global'));if(!s.data()?.maintenance&&val){alert('Debug requires maintenance mode.');settings();return;}}
+  await setDoc(doc(db,'settings','global'),{[key]:val},{merge:true});
+  await writeLog(`Setting: ${key}=${val}`); settings();
+};
+window.saveMessages = async () => {
+  await setDoc(doc(db,'settings','global'),{maintenanceMessage:document.getElementById('sMaintMsg').value.trim(),emergencyMessage:document.getElementById('sEmergMsg').value.trim()},{merge:true});
+  await writeLog('Updated system messages');
+};
+
+// ══════════════════════════════════════════════════════════
+// ANALYTICS
+// ══════════════════════════════════════════════════════════
+async function analytics() {
+  document.getElementById('mainContent').innerHTML='<div class="empty">Loading analytics...</div>';
+
+  const now = Date.now();
+  const DAY  = 86400000;
+  const WEEK = DAY * 7;
+
+  const [uSnap, lSnap, tSnap, arcadeSnap] = await Promise.all([
+    getDocs(collection(db,'users')),
+    getDocs(query(collection(db,'logs'), orderBy('timestamp','desc'), limit(500))),
+    getDocs(collection(db,'tickets')),
+    getDocs(collection(db,'arcade_plays')).catch(()=>({docs:[]})),
+  ]);
+
+  const users   = uSnap.docs.map(d=>({id:d.id,...d.data()}));
+  // Build lookup: uid → display name, and email → display name
+  const uidMap  = {};
+  users.forEach(u=>{ 
+    uidMap[u.id]    = u.username || u.email || u.id;
+    if(u.email) uidMap[u.email] = u.username || u.email;
+  });
+  const resolve = key => uidMap[key] || key;
+  const logs    = lSnap.docs.map(d=>d.data());
+  const tickets = tSnap.docs.map(d=>d.data());
+
+  // ── Active users ──────────────────────────────────────
+  const activeToday  = users.filter(u=>u.lastSeen && (now-u.lastSeen) < DAY).length;
+  const activeWeek   = users.filter(u=>u.lastSeen && (now-u.lastSeen) < WEEK).length;
+  const newThisWeek  = users.filter(u=>u.joinedAt && (now-u.joinedAt) < WEEK).length;
+
+  // ── Role breakdown ────────────────────────────────────
+  const roleCounts = {Owner:0,'Senior Mod':0,Mod:0,Staff:0,User:0};
+  users.forEach(u=>{ if(roleCounts[u.role]!==undefined) roleCounts[u.role]++; else roleCounts.User++; });
+
+  // ── Most active users (by log actions) ───────────────
+  const userActivity = {};
+  logs.forEach(l=>{ 
+    if(l.user){ 
+      const name = resolve(l.user);
+      userActivity[name]=(userActivity[name]||0)+1;
+    }
+  });
+  const topUsers = Object.entries(userActivity).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+  // ── Ticket stats ──────────────────────────────────────
+  const tOpen     = tickets.filter(t=>t.status==='open').length;
+  const tClosed   = tickets.filter(t=>t.status==='closed').length;
+  const tThisWeek = tickets.filter(t=>t.createdAt && (now-t.createdAt)<WEEK).length;
+
+  // ── Arcade plays (if tracked) ─────────────────────────
+  const arcadePlays = arcadeSnap.docs.map(d=>d.data());
+  const gameCounts  = {};
+  arcadePlays.forEach(p=>{ gameCounts[p.game]=(gameCounts[p.game]||0)+1; });
+  const topGames = Object.entries(gameCounts).sort((a,b)=>b[1]-a[1]);
+
+  // ── Action breakdown from logs ────────────────────────
+  const actionCounts = {};
+  logs.forEach(l=>{ 
+    const key = l.action ? l.action.split(' ').slice(0,3).join(' ') : 'unknown';
+    actionCounts[key]=(actionCounts[key]||0)+1;
+  });
+  const topActions = Object.entries(actionCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+  // ── Last seen distribution ────────────────────────────
+  const seen1h   = users.filter(u=>u.lastSeen&&(now-u.lastSeen)<3600000).length;
+  const seen24h  = users.filter(u=>u.lastSeen&&(now-u.lastSeen)<DAY).length;
+  const seen7d   = users.filter(u=>u.lastSeen&&(now-u.lastSeen)<WEEK).length;
+  const seen30d  = users.filter(u=>u.lastSeen&&(now-u.lastSeen)<DAY*30).length;
+  const inactive = users.filter(u=>!u.lastSeen||(now-u.lastSeen)>=DAY*30).length;
+
+  function bar(val, max, color='var(--accent)') {
+    const pct = max ? Math.round((val/max)*100) : 0;
+    return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+      <div style="flex:1;background:var(--border);border-radius:2px;height:8px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:2px;transition:width .4s"></div>
+      </div>
+      <span style="font-size:11px;color:var(--muted);min-width:28px;text-align:right">${val}</span>
+    </div>`;
+  }
+
+  const roleColors = {Owner:'#f59e0b','Senior Mod':'#14b8a6',Mod:'#3b82f6',Staff:'#22c55e',User:'var(--muted)'};
+
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="panel-title">📊 Analytics</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px">
+      <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value accent">${users.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Active Today</div><div class="stat-value">${activeToday}</div></div>
+      <div class="stat-card"><div class="stat-label">Active This Week</div><div class="stat-value">${activeWeek}</div></div>
+      <div class="stat-card"><div class="stat-label">New This Week</div><div class="stat-value">${newThisWeek}</div></div>
+      <div class="stat-card"><div class="stat-label">Open Tickets</div><div class="stat-value">${tOpen}</div></div>
+      <div class="stat-card"><div class="stat-label">Tickets This Week</div><div class="stat-value">${tThisWeek}</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+      <div class="card">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px;letter-spacing:1px">LAST SEEN</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Last hour</div>${bar(seen1h, users.length, '#22c55e')}
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:4px">Last 24h</div>${bar(seen24h, users.length, '#3b82f6')}
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:4px">Last 7 days</div>${bar(seen7d, users.length, '#f59e0b')}
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:4px">Last 30 days</div>${bar(seen30d, users.length, '#f97316')}
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;margin-bottom:4px">Inactive 30d+</div>${bar(inactive, users.length, '#ef4444')}
+      </div>
+
+      <div class="card">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px;letter-spacing:1px">ROLES</div>
+        ${Object.entries(roleCounts).map(([role,count])=>`
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${role}</div>
+          ${bar(count, users.length, roleColors[role]||'var(--accent)')}
+        `).join('')}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+      <div class="card">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px;letter-spacing:1px">MOST ACTIVE USERS</div>
+        ${topUsers.length ? topUsers.map(([user,count])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+            <span style="color:var(--text)">${user}</span>
+            <span style="color:var(--accent);font-weight:600">${count} actions</span>
+          </div>`).join('') : '<div class="empty">No data yet</div>'}
+      </div>
+
+      <div class="card">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px;letter-spacing:1px">COMMON ACTIONS</div>
+        ${topActions.length ? topActions.map(([action,count])=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+            <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%">${action}…</span>
+            <span style="color:var(--accent);font-weight:600">${count}</span>
+          </div>`).join('') : '<div class="empty">No logs yet</div>'}
+      </div>
+    </div>
+
+    ${topGames.length ? `
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px;letter-spacing:1px">🕹 ARCADE — MOST PLAYED</div>
+      ${topGames.map(([game,count])=>`
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${game}</div>
+        ${bar(count, topGames[0][1], '#a78bfa')}
+      `).join('')}
+    </div>` : `
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:8px;letter-spacing:1px">🕹 ARCADE</div>
+      <div class="empty" style="font-size:12px">Arcade tracking will appear here once players start logging plays.</div>
+    </div>`}
+
+    <div style="font-size:11px;color:var(--muted);text-align:right">
+      Last updated: ${new Date().toLocaleString()}
+      <button onclick="analytics()" style="margin-left:12px;background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer">↻ Refresh</button>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// LOGS / ALERTS / ROLES
+// ══════════════════════════════════════════════════════════
+async function logs() {
+  document.getElementById('mainContent').innerHTML='<div class="empty">Loading...</div>';
+  const snap=await getDocs(query(collection(db,'logs'),orderBy('timestamp','desc'),limit(50)));
+  const rows=snap.docs.map(d=>{const l=d.data();return`<div class="log-entry"><span class="log-time">${ts(l.timestamp)}</span><span class="log-user">${l.user||'—'}</span><span class="log-action">${l.action}</span></div>`;}).join('')||'<div class="empty">No logs</div>';
+  document.getElementById('mainContent').innerHTML=`<div class="panel"><div class="panel-title">System Logs</div><div class="card" style="padding:0">${rows}</div></div>`;
+}
+
+async function alerts() {
+  document.getElementById('mainContent').innerHTML='<div class="empty">Loading...</div>';
+  const snap=await getDocs(query(collection(db,'channels','devalerts','messages'),orderBy('timestamp','desc'),limit(50)));
+  const rows=snap.docs.map(d=>{const a=d.data();return`<div class="alert-entry"><div class="alert-meta"><span class="alert-sender">${a.sender||'—'}</span><span class="alert-time">${ts(a.timestamp)}</span></div><div class="alert-text">${a.text||''}</div></div>`;}).join('')||'<div class="empty">No alerts</div>';
+  document.getElementById('mainContent').innerHTML=`<div class="panel"><div class="panel-title">Mod Alerts</div><div class="card" style="padding:0">${rows}</div></div>`;
+}
+
+function roles() {
+  document.getElementById('mainContent').innerHTML=`
+  <div class="panel"><div class="panel-title">Role Reference</div>
+    <div class="card">
+      <p class="text-muted mb-16" style="font-size:14px;line-height:1.7">Roles stored on <span style="font-family:var(--mono);color:var(--accent2)">users/{uid}.role</span></p>
+      <div class="table-wrap"><table><thead><tr><th>Role</th><th>Badge</th><th>Promote Power</th><th>Punishments</th></tr></thead><tbody>
+        <tr><td>${rolePill('Owner')}</td><td>👑 Gold</td><td>Any role</td><td>All + Remove Warnings, Unmute, Unban</td></tr>
+        <tr><td>${rolePill('Senior Mod')}</td><td>✦ Teal</td><td>Mod</td><td>All Mod actions + Emergency Lockdown</td></tr>
+        <tr><td>${rolePill('Mod')}</td><td>🛡 Blue</td><td>Staff ↔ User only</td><td>Warn, Mute, Temp Ban, Ban</td></tr>
+        <tr><td>${rolePill('Staff')}</td><td>⚡ Green</td><td>None</td><td>Warn, Mute</td></tr>
+        <tr><td>${rolePill('User')}</td><td>None</td><td>None</td><td>None</td></tr>
+      </tbody></table></div>
+    </div>
+  </div>`;
+}
+
+// ── UTILS ─────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
+overview();
+// ── MY TICKETS ────────────────────────────────────────────
+async function mytickets() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(collection(db,'tickets'));
+  const mine = snap.docs.filter(d => {
+    const t = d.data();
+    return t.assignedTo === email;
+  });
+
+  if (!mine.length) {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="panel"><div class="panel-title">My Assigned Tickets</div>
+        <div class="empty" style="padding:48px">No tickets assigned to you yet</div>
+      </div>`;
+    return;
+  }
+
+  const rows = mine.map(d => {
+    const t = d.data(); const id = d.id;
+    const sp = {open:'pill-open',in_progress:'pill-progress',closed:'pill-closed'}[t.status]||'pill-none';
+    const pp = t.priority==='high'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(248,81,73,0.15);color:var(--danger);padding:1px 6px;border-radius:2px;margin-left:5px">HIGH</span>'
+      : t.priority==='medium'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(210,153,34,0.15);color:var(--warn);padding:1px 6px;border-radius:2px;margin-left:5px">MED</span>' : '';
+    return `<tr>
+      <td><span style="cursor:pointer;color:var(--text);font-weight:600" onclick="openTicket('${id}')">${escHtml(t.subject||'—')}</span>${pp}</td>
+      <td class="mono" style="font-size:11px">${t.createdBy||'—'}</td>
+      <td><span class="pill ${sp}">${t.status||'open'}</span></td>
+      <td class="mono" style="font-size:11px">${ts(t.timestamp)}</td>
+      <td><button class="btn btn-sm" onclick="openTicket('${id}')">Open</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="panel"><div class="panel-title">My Assigned Tickets (${mine.length})</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Subject</th><th>Created By</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+
+// module loaded
+</script>
+
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <button class="mobile-sidebar-btn" id="mobileSidebarBtn" onclick="toggleMobileSidebar()">☰</button>
+  <script>
+  function toggleMobileSidebar(){
+    document.querySelector('.sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('open');
+  }
+  function closeSidebar(){
+    document.querySelector('.sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('open');
+  }
+  // Close sidebar when nav button clicked on mobile
+  document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>{
+    if(window.innerWidth<=768) closeSidebar();
+  }));
+  </script>
+</body>
+</html>

@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOVA — Mod</title>
+<link rel="stylesheet" href="nova-shared.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-name">NOVA</div>
+    <div class="sidebar-logo-sub">Mod Console</div>
+  </div>
+  <nav class="sidebar-nav">
+    <button class="nav-btn active" onclick="showPanel('overview')" id="nav-overview"><span class="nav-icon">◈</span> Overview</button>
+    <button class="nav-btn"        onclick="showPanel('tickets')"  id="nav-tickets"><span class="nav-icon">⊟</span> Tickets</button>
+    <button class="nav-btn" onclick="showPanel('mytickets')" id="nav-mytickets"><span class="nav-icon">🎫</span> My Tickets</button>
+    <button class="nav-btn"        onclick="showPanel('users')"    id="nav-users"><span class="nav-icon">⊕</span> Users</button>
+    <button class="nav-btn"        onclick="showPanel('logs')"     id="nav-logs"><span class="nav-icon">⊟</span> Logs</button>
+    <button class="nav-btn"        onclick="showPanel('alerts')"   id="nav-alerts"><span class="nav-icon">◬</span> Alerts</button>
+    <button class="nav-btn"        onclick="showPanel('guide')"    id="nav-guide"><span class="nav-icon">📋</span> Guide</button>
+    <button class="nav-btn" onclick="window.location.href='chat.html'"
+      style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px">
+      <span class="nav-icon">←</span> Back to Chat
+    </button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user-email" id="userEmail">—</div>
+    <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+  </div>
+</aside>
+
+<div class="main-area">
+  <div class="topbar">
+    <div class="topbar-title" id="topbarTitle">OVERVIEW</div>
+    <div class="topbar-badges">
+      <span class="badge badge-maint" id="badgeMaint" style="display:none">⚠ MAINTENANCE</span>
+      <span class="badge badge-debug" id="badgeDebug" style="display:none">⚡ DEBUG</span>
+      <span class="badge badge-mod">🛡 MOD</span>
+    </div>
+  </div>
+  <div class="banner banner-maint" id="bannerMaint"></div>
+  <div class="banner banner-debug" id="bannerDebug">⚡ Debug mode active</div>
+  <div class="content" id="mainContent"><div class="empty">Loading...</div></div>
+</div>
+
+<div class="debug-hud" id="debugHud">
+  <div class="hud-title">▸ Debug HUD</div>
+  <div class="hud-row"><span class="hud-key">REAL ROLE</span><span class="hud-val">Mod</span></div>
+  <div class="hud-row"><span class="hud-key">SIM ROLE</span><span class="hud-val" id="hudSim">—</span></div>
+  <div class="hud-row"><span class="hud-key">DEBUG</span><span class="hud-val" id="hudDebug">off</span></div>
+  <div class="hud-row"><span class="hud-key">USER</span><span class="hud-val" id="hudEmail" style="max-width:130px;overflow:hidden;text-overflow:ellipsis">—</span></div>
+  <hr class="divider" style="margin:10px 0">
+  <div class="form-label">Simulate Role</div>
+  <select class="form-select" onchange="simRole(this.value)" style="font-size:12px;padding:6px 10px">
+    <option value="">None</option>
+    <option value="Mod">Mod</option>
+    <option value="Staff">Staff</option>
+  </select>
+</div>
+
+<div id="modalContainer"></div>
+
+<script>
+// Bridge: queue calls until module loads
+(function(){
+  const Q=[];
+  const proxy=n=>function(){Q.push([n,arguments]);};
+  ['showPanel','manageUser','warnUser','confirmWarn','permBan','confirmPermBan',
+   'saveUser','closeModal','escalateToSenior','escalateToOwner','appealAction'].forEach(n=>window[n]=proxy(n));
+  window._modDrain=function(){
+    Q.forEach(([n,a])=>{if(typeof window[n]==='function'&&window[n].toString().indexOf('proxy')===-1)window[n](...a);});
+  };
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>window.addEventListener("load",()=>{if(window.emailjs)emailjs.init("G7xmtT6VrVzxi1rfJ");});</script>
+<script type="module">
+import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDocs, getDoc, addDoc, updateDoc,
+  deleteDoc, query, orderBy, limit, where, onSnapshot, arrayUnion
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyClEfbrTpSwVPpThWZJukobJN9tCKMXTx4",
+  authDomain: "nova-7a26f.firebaseapp.com",
+  projectId: "nova-7a26f",
+  storageBucket: "nova-7a26f.firebasestorage.app",
+  messagingSenderId: "98300801242",
+  appId: "1:98300801242:web:77c16453b6dac8fed3b5e3",
+  measurementId: "G-67N1G1RFMS"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+const uid   = sessionStorage.getItem('nova_uid');
+const email = sessionStorage.getItem('nova_email');
+const role  = sessionStorage.getItem('nova_role');
+const simulating = sessionStorage.getItem('nova_simulating');
+const realRole = sessionStorage.getItem('nova_real_role') || role;
+if (!uid || (role !== 'Mod' && role !== 'Senior Mod' && !(simulating && ['Owner','Senior Mod'].includes(realRole)))) { window.location.href = 'index.html'; }
+// Restore real role after entering via simulation
+if (simulating) { sessionStorage.setItem('nova_role', realRole); sessionStorage.removeItem('nova_simulating'); }
+
+document.getElementById('userEmail').textContent = email || '—';
+document.getElementById('hudEmail').textContent  = email || '—';
+
+onSnapshot(doc(db,'settings','global'), snap => {
+  if (!snap.exists()) return;
+  const s = snap.data();
+  document.getElementById('badgeMaint').style.display = s.maintenance ? '' : 'none';
+  document.getElementById('badgeDebug').style.display = s.debug ? '' : 'none';
+  const bm = document.getElementById('bannerMaint');
+  if (s.maintenance) { bm.style.display='block'; bm.textContent='⚠ '+(s.maintenanceMessage||'Maintenance active.'); }
+  else bm.style.display = 'none';
+  document.getElementById('bannerDebug').style.display = s.debug ? 'block' : 'none';
+  document.getElementById('debugHud').style.display    = s.debug ? 'block' : 'none';
+  document.getElementById('hudDebug').textContent      = s.debug ? 'on'  : 'off';
+});
+
+// ── HELPERS ───────────────────────────────────────────────
+window.showPanel = function(name) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const nb = document.getElementById('nav-'+name); if (nb) nb.classList.add('active');
+  document.getElementById('topbarTitle').textContent = name.toUpperCase();
+  ({ overview, tickets, users, logs, alerts, mytickets, guide: guidePanel })[name]?.();
+};
+window.doLogout = async () => { await signOut(auth); sessionStorage.clear(); window.location.href='index.html'; };
+window.simRole  = r => { document.getElementById('hudSim').textContent = r||'—'; };
+
+function ts(n) {
+  if (!n) return '—';
+  const d = typeof n==='object' && n.seconds ? new Date(n.seconds*1000) : new Date(n);
+  return d.toLocaleString();
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function closeModal() { document.getElementById('modalContainer').innerHTML=''; }
+function openModal(html, lg=false) {
+  document.getElementById('modalContainer').innerHTML =
+    `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+       <div class="modal${lg?' modal-lg':''}">${html}</div>
+     </div>`;
+}
+window.closeModal = closeModal;
+
+async function writeLog(action) {
+  await addDoc(collection(db,'logs'), { user:email, role:'Mod', action, timestamp:Date.now() });
+}
+
+function rolePill(r) {
+  const map  = { Owner:'pill-owner', Mod:'pill-mod', Staff:'pill-staff', User:'pill-user' };
+  const icons = { Owner:'👑 ', Mod:'🛡 ', Staff:'⚡ ', User:'' };
+  return `<span class="pill ${map[r]||'pill-user'}">${icons[r]||''}${r}</span>`;
+}
+
+// Load Staff users for assignment dropdown (Mods assign to Staff)
+async function loadStaffUsers() {
+  const snap = await getDocs(collection(db,'users'));
+  const all = snap.docs.map(d => ({ uid:d.id, ...d.data() }));
+  // Senior Mod can assign to Mods and Staff
+  // Mod can assign to Staff only
+  if (role === 'Senior Mod') {
+    return all.filter(u => ['Staff','Mod'].includes(u.role))
+      .sort((a,b) => (a.username||a.email).localeCompare(b.username||b.email));
+  }
+  return all.filter(u => u.role === 'Staff')
+    .sort((a,b) => (a.username||a.email).localeCompare(b.username||b.email));
+}
+
+function buildStaffSelect(staffUsers, currentAssigned) {
+  const roleLabel = u => u.role==='Senior Mod'?'✦ Senior Mod':u.role==='Mod'?'🛡 Mod':'⚡ Staff';
+  const opts = staffUsers
+    .filter(u => u.email !== email) // don't show self in list, covered by Myself option
+    .map(u => `<option value="${u.email}" ${currentAssigned===u.email?'selected':''}>${u.username||u.email} [${roleLabel(u)}]</option>`)
+    .join('');
+  return `<select class="form-select" id="mAssign">
+    <option value="">Unassigned</option>
+    <option value="${email}" ${currentAssigned===email?'selected':''}>Myself [${role==='Senior Mod'?'✦ Senior Mod':'🛡 Mod'}]</option>
+    ${opts}
+  </select>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// OVERVIEW
+// ══════════════════════════════════════════════════════════
+async function overview() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const [tSnap, lSnap, appealSnap, raidSnap, settSnap2, recentUsersSnap] = await Promise.all([
+    getDocs(collection(db,'tickets')),
+    getDocs(query(collection(db,'logs'), orderBy('timestamp','desc'), limit(8))),
+    getDocs(query(collection(db,'tickets'), where('category','in',['ban_appeal','mute_appeal']), orderBy('timestamp','desc'), limit(5))),
+    getDocs(query(collection(db,'logs'), where('action','>=','Triggered'), orderBy('action'), orderBy('timestamp','desc'), limit(3))),
+    getDoc(doc(db,'settings','global')),
+    getDocs(query(collection(db,'users'), where('joinedAt','>',Date.now()-10*60*1000), orderBy('joinedAt','desc'))),
+  ]);
+  const lkActive = settSnap2.exists()&&settSnap2.data().emergency;
+  const open   = tSnap.docs.filter(d=>d.data().status==='open').length;
+  const prog   = tSnap.docs.filter(d=>d.data().status==='in_progress').length;
+  const closed = tSnap.docs.filter(d=>d.data().status==='closed').length;
+
+  const logRows = lSnap.docs.map(d => {
+    const l=d.data();
+    return `<div class="log-entry"><span class="log-time">${ts(l.timestamp)}</span><span class="log-user">${l.user||'—'}</span><span class="log-action">${l.action}</span></div>`;
+  }).join('') || '<div class="empty">No logs</div>';
+
+  // Build alert rows for overview
+  const alertItems = [];
+  const recentJoins = recentUsersSnap.docs.length;
+  if(recentJoins >= 5){
+    alertItems.push({ ts: Date.now(), html:`<div class="alert-entry" style="border-left:3px solid #e040fb"><div class="alert-meta"><span style="font-family:var(--mono);font-size:9px;font-weight:700;color:#e040fb;background:rgba(224,64,251,.12);padding:1px 7px;border-radius:8px">🚨 POSSIBLE RAID</span></div><div class="alert-text"><strong>${recentJoins} new accounts</strong> in last 10 min</div></div>`});
+  } else if(recentJoins >= 3){
+    alertItems.push({ ts: Date.now(), html:`<div class="alert-entry" style="border-left:3px solid var(--warn)"><div class="alert-meta"><span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--warn);background:rgba(210,153,34,.12);padding:1px 7px;border-radius:8px">⚠ SUSPICIOUS</span></div><div class="alert-text"><strong>${recentJoins} new accounts</strong> in last 10 min</div></div>`});
+  }
+  raidSnap.docs.forEach(d=>{const l=d.data();alertItems.push({ts:l.timestamp,html:`<div class="alert-entry" style="border-left:3px solid #e040fb"><div class="alert-meta"><span style="font-family:var(--mono);font-size:9px;font-weight:700;color:#e040fb;background:rgba(224,64,251,.1);padding:1px 7px;border-radius:8px">🔒 LOCKDOWN</span><span class="alert-time">${ts(l.timestamp)}</span></div><div class="alert-text">${escHtml(l.action||'')}</div></div>`});});
+  appealSnap.docs.forEach(d=>{const t=d.data();const isBan=t.category==='ban_appeal';const color=isBan?'var(--danger)':'var(--warn)';alertItems.push({ts:t.timestamp,html:`<div class="alert-entry" style="border-left:3px solid ${color}"><div class="alert-meta"><span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${color};padding:1px 7px;border-radius:8px">${isBan?'🚫 Ban Appeal':'🔇 Mute Appeal'}</span><span class="alert-time">${ts(t.timestamp)}</span></div><div class="alert-text">${escHtml(t.createdByUsername||'?')} — ${escHtml((t.subject||'').slice(0,40))}</div></div>`});});
+  alertItems.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const alertRows = alertItems.length ? alertItems.slice(0,5).map(a=>a.html).join('') : '<div class="empty">No alerts</div>';
+
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="panel-title">Mod Overview</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Open</div><div class="stat-value accent">${open}</div></div>
+      <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value">${prog}</div></div>
+      <div class="stat-card"><div class="stat-label">Closed</div><div class="stat-value">${closed}</div></div>
+      <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${tSnap.size}</div></div>
+    </div>
+    ${role==='Senior Mod'?`
+    <div style="margin-top:4px;margin-bottom:16px;padding:14px 16px;background:rgba(248,81,73,.06);border:1px solid rgba(248,81,73,.2);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--danger);text-transform:uppercase;margin-bottom:3px">🔒 Lockdown Mode</div>
+        <div style="font-size:12px;color:var(--text-muted)">${lkActive?'Currently active — all users below Senior Mod are locked out.':'Locks out all users below Senior Mod. Sends an alert to the Owner immediately.'}</div>
+      </div>
+      ${lkActive
+        ?'<button class="btn" style="background:rgba(63,185,80,.15);border-color:rgba(63,185,80,.4);color:var(--success);flex-shrink:0" onclick="liftLockdown()">🔓 Lift Lockdown</button>'
+        :'<button class="btn" style="background:rgba(248,81,73,.15);border-color:rgba(248,81,73,.4);color:var(--danger);flex-shrink:0" onclick="triggerLockdown()">🔒 Trigger Lockdown</button>'
+      }
+    </div>`:''}
+    <div class="grid-2">
+      <div><div class="section-header"><div class="section-title">Recent Logs</div></div><div class="card" style="padding:0">${logRows}</div></div>
+      <div><div class="section-header"><div class="section-title">Alerts</div></div><div class="card" style="padding:0">${alertRows}</div></div>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// TICKETS
+// ══════════════════════════════════════════════════════════
+async function tickets() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(query(collection(db,'tickets'), orderBy('timestamp','desc')));
+
+  const rows = snap.docs.filter(d => {
+    // Mods don't see tickets escalated to Owner
+    const el2 = d.data().escalationLevel || 'none';
+    return el2 !== 'mod_to_senior' && el2 !== 'senior_to_owner';
+  }).map(d => {
+    const t=d.data(); const id=d.id;
+    const sp = {open:'pill-open',in_progress:'pill-progress',closed:'pill-closed'}[t.status]||'pill-none';
+    const ep = {none:'pill-none',staff_to_mod:'pill-s2m',mod_to_senior:'pill-s2m',senior_to_owner:'pill-m2o'}[t.escalationLevel]||'pill-none';
+    const pp = t.priority==='high'?'<span style="font-family:var(--mono);font-size:9px;background:rgba(248,81,73,0.15);color:var(--danger);padding:1px 6px;border-radius:2px;margin-left:5px">HIGH</span>':t.priority==='medium'?'<span style="font-family:var(--mono);font-size:9px;background:rgba(210,153,34,0.15);color:var(--warn);padding:1px 6px;border-radius:2px;margin-left:5px">MED</span>':'';
+    const isAssignedToMe = t.assignedTo === email;
+
+    return `<tr>
+      <td>
+        <span style="cursor:pointer;color:var(--text);font-weight:600" onclick="openTicket('${id}')">${escHtml(t.subject||'—')}</span>
+        ${t.category==='ban_appeal'?'<span style="font-family:var(--mono);font-size:8px;background:rgba(248,81,73,.15);color:var(--danger);padding:1px 6px;border-radius:4px;margin-left:5px;font-weight:700">BAN APPEAL</span>':t.category==='mute_appeal'?'<span style="font-family:var(--mono);font-size:8px;background:rgba(210,153,34,.15);color:var(--warn);padding:1px 6px;border-radius:4px;margin-left:5px;font-weight:700">MUTE APPEAL</span>':''}
+      </td>
+      <td class="mono" style="font-size:11px">${t.createdBy||'—'}</td>
+      <td><span class="pill ${sp}">${t.status||'—'}</span></td>
+      <td class="mono" style="font-size:11px">${t.assignedTo||'Unassigned'}</td>
+      <td><span class="pill ${ep}">${{'none':'None','staff_to_mod':'Staff→Mod','mod_to_senior':'Mod→Senior Mod','senior_to_owner':'Senior→Owner'}[t.escalationLevel]||t.escalationLevel||'none'}</span></td>
+      <td class="mono" style="font-size:11px">${ts(t.timestamp)}</td>
+      <td>
+        <div class="flex-gap-sm">
+          <button class="btn btn-sm" onclick="openTicket('${id}')">Open</button>
+          ${!t.assignedTo?`<button class="btn btn-sm btn-success" onclick="assignToSelf('${id}')">Assign Me</button>`:''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7"><div class="empty">No tickets</div></td></tr>';
+
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="section-header">
+      <div class="panel-title">Ticket Management</div>
+      <button class="btn btn-primary" onclick="newTicketModal()">+ New Ticket</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr>
+        <th>Subject</th><th>Created By</th><th>Status</th><th>Assigned To</th><th>Escalation</th><th>Created</th><th>Actions</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  </div>`;
+}
+
+window.assignToSelf = async function(id) {
+  await updateDoc(doc(db,'tickets',id), { assignedTo: email });
+  await writeLog(`Self-assigned ticket ${id}`);
+  tickets();
+};
+
+window.newTicketModal = async function() {
+  const staffUsers = await loadStaffUsers();
+  openModal(`
+    <div class="modal-title">New Ticket</div>
+    <div class="form-group"><label class="form-label">Subject</label><input class="form-input" id="mSubject"></div>
+    <div class="form-group"><label class="form-label">Message</label><textarea class="form-textarea" id="mMsg"></textarea></div>
+    <div class="form-group"><label class="form-label">Assign To</label>${buildStaffSelect(staffUsers,'')}</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewTicket()">Create</button>
+    </div>`);
+};
+
+window.saveNewTicket = async function() {
+  const subj = document.getElementById('mSubject').value.trim();
+  if (!subj) return;
+  await addDoc(collection(db,'tickets'), {
+    subject:subj, message:document.getElementById('mMsg').value.trim(),
+    createdBy:email, assignedTo:document.getElementById('mAssign').value||'',
+    status:'open', timestamp:Date.now(),
+    escalationLevel:'none', escalationReason:'', escalatedBy:''
+  });
+  await writeLog(`Created ticket: ${subj}`);
+  closeModal(); tickets();
+};
+
+// Open ticket — Mod can only see chat if assigned to them
+window.openTicket = async function(id) {
+  const snap = await getDoc(doc(db,'tickets',id));
+  if (!snap.exists()) return;
+  const t = snap.data();
+  const staffUsers = await loadStaffUsers();
+  const isAssignedToMe = t.assignedTo === email;
+  const canSeeChat = isAssignedToMe;
+  const canEscalate = !['mod_to_senior','senior_to_owner'].includes(t.escalationLevel) && t.status !== 'closed';
+  const isAppeal = t.category === 'ban_appeal' || t.category === 'mute_appeal';
+  // Fetch user's current punishment status for appeal actions
+  let appealUser = null;
+  if (isAppeal && t.createdByUid) {
+    const uSnap = await getDoc(doc(db,'users',t.createdByUid));
+    if (uSnap.exists()) appealUser = { uid: t.createdByUid, ...uSnap.data() };
+  }
+  const now = Date.now();
+  const isMuted = appealUser && appealUser.mutedUntil && (appealUser.mutedUntil.seconds ? appealUser.mutedUntil.seconds*1000 : new Date(appealUser.mutedUntil).getTime()) > now;
+  const isBanned = appealUser && (appealUser.banned || (appealUser.tempBannedUntil && (appealUser.tempBannedUntil.seconds ? appealUser.tempBannedUntil.seconds*1000 : new Date(appealUser.tempBannedUntil).getTime()) > now));
+
+  openModal(`
+    <div class="modal-title">Ticket: ${escHtml(t.subject||'—')}</div>
+    <div class="grid-2" style="gap:16px;margin-bottom:16px">
+      <div>
+        <div class="form-group">
+          <div class="form-label">Status</div>
+          <select class="form-select" id="tStatus">
+            <option value="open"        ${t.status==='open'?'selected':''}>Open</option>
+            <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
+            <option value="closed"      ${t.status==='closed'?'selected':''}>Closed</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Assign To</div>
+          ${buildStaffSelect(staffUsers, t.assignedTo||'')}
+        </div>
+        ${canEscalate ? `
+        <div class="form-group">
+          <div class="form-label">Escalation Reason</div>
+          <input class="form-input" id="tEscReason" placeholder="Required to escalate" value="${t.escalationReason||''}">
+        </div>` : `
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:8px">ESCALATION</div>
+        <span class="pill pill-m2o">Escalated to Owner</span>`}
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:6px">CREATED BY</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">${t.createdBy||'—'}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:6px">MESSAGE</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px">${escHtml(t.message||'(no message)')}</div>
+      </div>
+    </div>
+
+    ${canSeeChat ? `
+    <div class="ticket-chat-wrap">
+      <div class="ticket-chat-header">💬 Ticket Chat</div>
+      <div class="ticket-chat-messages" id="tchatMessages">
+        <div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;text-align:center;padding:20px">Loading...</div>
+      </div>
+      <div class="ticket-chat-input">
+        <input id="tchatInput" placeholder="Message..." onkeydown="if(event.key==='Enter')sendTicketChat('${id}')">
+        <button onclick="sendTicketChat('${id}')">Send</button>
+      </div>
+    </div>` : `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px">
+      💬 Ticket chat only visible when assigned to you
+    </div>`}
+
+    ${isAppeal ? `<div style="padding:12px 14px;background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:8px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:var(--text-muted)">
+        ${t.category==='mute_appeal'?'🔇 Mute Appeal':'🚫 Ban Appeal'} — 
+        <strong>${t.createdByUsername||t.createdBy||'?'}</strong>
+        ${isMuted?' · <span style="color:var(--warn)">Currently Muted</span>':''}
+        ${isBanned?' · <span style="color:var(--danger)">Currently Banned</span>':''}
+        ${!isMuted&&!isBanned?' · <span style="color:var(--success)">No active punishment</span>':''}
+      </div>
+      <div style="display:flex;gap:8px">
+        ${isMuted?`<button class="btn" style="background:rgba(63,185,80,.15);border-color:rgba(63,185,80,.4);color:var(--success)" onclick="appealAction('${id}','unmute','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">✅ Unmute</button>`:''}
+        ${isBanned?`<button class="btn" style="background:rgba(63,185,80,.15);border-color:rgba(63,185,80,.4);color:var(--success)" onclick="appealAction('${id}','unban','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">✅ Unban</button>`:''}
+        <button class="btn" style="background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.3);color:var(--danger)" onclick="appealAction('${id}','deny','${t.createdByUid||''}','${escHtml(t.createdByUsername||'')}')">❌ Deny Appeal</button>
+      </div>
+    </div>` : ''}
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="closeTicket('${id}')">Close &amp; Delete</button>
+      ${canEscalate && role==='Senior Mod' ? `<button class="btn btn-warn" onclick="escalateToOwner('${id}')">Escalate to Owner</button>` : canEscalate && role==='Mod' ? `<button class="btn btn-warn" onclick="escalateToSenior('${id}')">Escalate to Senior Mod</button>` : ''}
+      <button class="btn btn-primary" onclick="saveTicketMod('${id}')">Save Changes</button>
+    </div>`, true);
+
+  if (canSeeChat) loadTicketChat(id);
+};
+
+function loadTicketChat(ticketId) {
+  const q = query(collection(db,'tickets',ticketId,'chat'), orderBy('timestamp','asc'));
+  const unsub = onSnapshot(q, snap => {
+    const el = document.getElementById('tchatMessages');
+    if (!el) { unsub(); return; }
+    if (!snap.docs.length) {
+      el.innerHTML = `<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;text-align:center;padding:20px">No messages yet</div>`;
+      return;
+    }
+    el.innerHTML = snap.docs.map(d => {
+      const m=d.data();
+      const r=m.senderRole||'User';
+      const cls=r==='Owner'?'avatar-owner':r==='Mod'?'avatar-mod':r==='Staff'?'avatar-staff':'avatar-user';
+      const col=r==='Owner'?'var(--gold)':r==='Mod'?'var(--info)':r==='Staff'?'var(--success)':'var(--text)';
+      return `<div class="tchat-msg">
+        <div class="tchat-avatar ${cls}">${(m.senderEmail||'?')[0].toUpperCase()}</div>
+        <div class="tchat-body">
+          <div class="tchat-meta">
+            <span class="tchat-author" style="color:${col}">${m.senderEmail||'—'}</span>
+            <span class="tchat-time">${ts(m.timestamp)}</span>
+          </div>
+          <div class="tchat-text">${escHtml(m.text||'')}</div>
+        </div>
+      </div>`;
+    }).join('');
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+window.sendTicketChat = async function(ticketId) {
+  const input = document.getElementById('tchatInput');
+  if (!input) return;
+  const text = input.value.trim(); if (!text) return;
+  input.value = '';
+  await addDoc(collection(db,'tickets',ticketId,'chat'), {
+    text, senderUid:uid, senderEmail:email, senderRole:'Mod', timestamp:Date.now()
+  });
+  try { await updateDoc(doc(db,'tickets',ticketId), { lastStaffReply:Date.now() }); } catch(_) {}
+};
+
+window.saveTicketMod = async function(id) {
+  const data = {
+    status:    document.getElementById('tStatus').value,
+    assignedTo:document.getElementById('mAssign').value||'',
+  };
+  await updateDoc(doc(db,'tickets',id), data);
+  await writeLog(`Updated ticket ${id}`);
+  closeModal(); tickets();
+};
+
+window.escalateToSenior = async function(id) {
+  const reason = document.getElementById('tEscReason')?.value.trim();
+  if (!reason) { alert('An escalation reason is required.'); return; }
+  await updateDoc(doc(db,'tickets',id), {
+    escalationLevel:'mod_to_senior',
+    escalationReason:reason,
+    escalatedBy:email,
+  });
+  await writeLog(`Escalated ticket ${id} to Senior Mod`);
+  closeModal(); tickets();
+};
+
+window.escalateToOwner = async function(id) {
+  const reason = document.getElementById('tEscReason')?.value.trim();
+  if (!reason) { alert('An escalation reason is required.'); return; }
+  await updateDoc(doc(db,'tickets',id), {
+    escalationLevel:'senior_to_owner',
+    escalationReason:reason,
+    escalatedBy:email,
+    status:'in_progress',
+  });
+  await writeLog(`Escalated ticket ${id} to Owner`);
+  closeModal(); tickets();
+};
+
+window.appealAction = async function(ticketId, action, uid, username) {
+  if (!uid) { alert('Cannot find user.'); return; }
+  if (action === 'unmute') {
+    if (!confirm(`Unmute ${username}?`)) return;
+    await updateDoc(doc(db,'users',uid), { mutedUntil: null });
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'approved' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`✅ Appeal approved — ${username} has been unmuted by ${email}.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    await writeLog(`Appeal approved: unmuted ${username}`);
+    closeModal(); tickets();
+  } else if (action === 'unban') {
+    if (!confirm(`Unban ${username}? This will remove both perm ban and temp ban.`)) return;
+    await updateDoc(doc(db,'users',uid), { banned:false, tempBannedUntil:null });
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'approved' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`✅ Appeal approved — ${username} has been unbanned by ${email}.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    await writeLog(`Appeal approved: unbanned ${username}`);
+    closeModal(); tickets();
+  } else if (action === 'deny') {
+    if (!confirm(`Deny ${username}'s appeal? Their punishment will remain.`)) return;
+    await updateDoc(doc(db,'tickets',ticketId), { status:'closed', appealOutcome:'denied' });
+    await addDoc(collection(db,'tickets',ticketId,'chat'), {
+      text:`❌ Appeal denied — your punishment will remain. If you have further questions, please contact a Senior Mod or Owner.`,
+      senderUid:'system',senderEmail:'NOVA System',senderUsername:'NOVA System',senderRole:'System',timestamp:Date.now(),system:true
+    });
+    await writeLog(`Appeal denied for ${username}`);
+    closeModal(); tickets();
+  }
+};
+
+window.closeTicket = async function(id) {
+  if (!confirm('Close and permanently delete this ticket and its chat?')) return;
+  const chatSnap = await getDocs(collection(db,'tickets',id,'chat'));
+  for (const d of chatSnap.docs) await deleteDoc(d.ref);
+  await deleteDoc(doc(db,'tickets',id));
+  await writeLog(`Closed & deleted ticket ${id}`);
+  closeModal(); tickets();
+};
+
+// ══════════════════════════════════════════════════════════
+// USERS — Mod level: Warn, Mute, Temp Ban, Ban
+//          + promote/demote Staff ↔ User only
+// ══════════════════════════════════════════════════════════
+async function users() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(collection(db,'users'));
+  const rows = snap.docs.map(d => {
+    const u=d.data(); const uid2=d.id;
+    if (u.role==='Owner') return ''; // Mod can't see Owner
+    const uname = u.username||u.email||'—';
+    const now = Date.now();
+    const isTempBanned = u.tempBannedUntil && (u.tempBannedUntil.seconds ? u.tempBannedUntil.seconds*1000 : new Date(u.tempBannedUntil).getTime()) > now;
+    const isMuted = u.mutedUntil && (u.mutedUntil.seconds ? u.mutedUntil.seconds*1000 : new Date(u.mutedUntil).getTime()) > now;
+    let statusPill = '<span class="pill pill-none">Active</span>';
+    if (u.banned) statusPill = '<span class="pill pill-banned">Banned</span>';
+    else if (isTempBanned) statusPill = '<span class="pill pill-tempban">Temp Banned</span>';
+    else if (isMuted) statusPill = '<span class="pill pill-muted">Muted</span>';
+    const pfpHtml = u.pfp
+      ? `<img src="${u.pfp}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+      : `<div style="width:26px;height:26px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-dim);flex-shrink:0">${uname[0].toUpperCase()}</div>`;
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">${pfpHtml}<div><div style="font-weight:600;font-size:13px">${escHtml(uname)}</div><div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">${u.email||''}</div></div></div></td>
+      <td>${rolePill(u.role||'User')}</td>
+      <td style="font-family:var(--mono)">${u.warningsCount||0}</td>
+      <td>${statusPill}</td>
+      <td><button class="btn btn-sm" onclick="manageUser('${uid2}')">Manage</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5"><div class="empty">No users</div></td></tr>';
+
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel"><div class="panel-title">User Management</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th>User</th><th>Role</th><th>Warnings</th><th>Status</th><th>Actions</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>
+  </div>`;
+}
+
+window.manageUser = async function(uid2) {
+  const snap = await getDoc(doc(db,'users',uid2));
+  if (!snap.exists()) return;
+  const u = snap.data();
+  if (u.role === 'Owner' || u.role === 'Senior Mod') return; // cannot touch Owner or Senior Mod
+  const uname = u.username||u.email||'—';
+  const now = Date.now();
+  const isTempBanned = u.tempBannedUntil && (u.tempBannedUntil.seconds?u.tempBannedUntil.seconds*1000:new Date(u.tempBannedUntil).getTime()) > now;
+  const isMuted = u.mutedUntil && (u.mutedUntil.seconds?u.mutedUntil.seconds*1000:new Date(u.mutedUntil).getTime()) > now;
+
+  // Mod can only change role between Staff and User
+  const canChangeRole = u.role !== 'Senior Mod' && u.role !== 'Owner';
+  const isSeniorMod = role === 'Senior Mod';
+  const roleHtml = canChangeRole
+    ? `<div class="form-group">
+        <div class="form-label">Role</div>
+        <select class="form-select" id="mRole">
+          <option value="User"  ${u.role==='User'?'selected':''}>User</option>
+          <option value="Staff" ${u.role==='Staff'?'selected':''}>⚡ Staff</option>
+          <option value="Mod"   ${u.role==='Mod'?'selected':''}>🛡 Mod</option>
+          ${isSeniorMod?`<option value="Senior Mod" ${u.role==='Senior Mod'?'selected':''}>✦ Senior Mod</option>`:''}
+        </select>
+      </div>`
+    : `<div class="form-group"><div class="form-label">Role</div><div style="font-family:var(--mono);font-size:12px;color:var(--text-dim);padding:4px 0">${rolePill(u.role)} — cannot be changed</div></div>`;
+
+  const staffNotes = u.staffNotes||'';
+  const history = (u.punishmentHistory||[]).slice(-6).reverse();
+  const histHtml = history.length
+    ? history.map(p=>`<div class="punish-item"><span class="punish-type text-warn">${p.type}</span><span style="color:var(--text-muted);font-size:12px;flex:1">${p.reason||'—'}</span><span class="punish-date">${ts(p.at)}</span></div>`).join('')
+    : '<div style="color:var(--text-dim);font-family:var(--mono);font-size:11px;padding:8px">No history</div>';
+
+  openModal(`
+    <div class="modal-title">Manage: ${escHtml(uname)}</div>
+    <div class="grid-2" style="gap:16px;margin-bottom:16px">
+      <div>
+        ${roleHtml}
+        <div class="form-group">
+          <div class="form-label">Mute Duration</div>
+          <select class="form-select" id="mMuteDur">
+            <option value="">No mute</option>
+            <option value="3600000">1 hour</option>
+            <option value="7200000">2 hours</option>
+            <option value="10800000">3 hours</option>
+            <option value="21600000">6 hours</option>
+            <option value="86400000">24 hours</option>
+            <option value="604800000">7 days</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Temp Ban Duration</div>
+          <select class="form-select" id="mTempBan">
+            <option value="">No temp ban</option>
+            <option value="86400000">1 day</option>
+            <option value="259200000">3 days</option>
+            <option value="604800000">7 days</option>
+            <option value="1209600000">14 days</option>
+            <option value="2592000000">30 days</option>
+          </select>
+        </div>
+            <div class="form-group">
+              <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+              <select class="form-select" id="mRuleSelect" onchange="
+                var sel=this;
+                var o=document.getElementById('mOtherWrap');
+                var btn=document.getElementById('mConfirmBtn');
+                if(sel.value==='other'){o.style.display='block';if(btn)btn.disabled=true;}
+                else{o.style.display='none';if(btn)btn.disabled=false;}
+                showRuleHint(sel.value,'mod');">
+                <option value="" disabled selected>Select a rule...</option>
+                <option value="01">01 — Be Respectful</option>
+                <option value="02">02 — No Spam</option>
+                <option value="03">03 — No NSFW Content</option>
+                <option value="04">04 — No Self-Promotion or Advertising</option>
+                <option value="05">05 — No Doxxing or Personal Info</option>
+                <option value="06">06 — Not Following Staff Instructions</option>
+                <option value="07">07 — Ban/Mute Evasion</option>
+                <option value="08">08 — English Only in General</option>
+                <option value="09">09 — Minimodding</option>
+                <option value="other">Other — please explain</option>
+              </select>
+            </div>
+            <div id="mOtherWrap" style="display:none" class="form-group">
+              <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+              <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:68px"
+                oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+            </div>
+            <div id="mRuleHint"></div>
+      </div>
+      <div>
+        <div class="form-label" style="margin-bottom:6px">Staff Notes <span style="color:var(--text-dim);font-size:9px">(private — visible to Staff+ only)</span></div>
+        <textarea class="form-textarea" id="mStaffNotes" placeholder="Add private notes about this user..." style="min-height:60px;margin-bottom:12px">${escHtml(staffNotes)}</textarea>
+        <div class="form-label" style="margin-bottom:8px">Punishment History</div>
+        <div class="punish-list">${histHtml}</div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-warn btn-sm" onclick="warnUser('${uid2}','${escHtml(uname)}')">Warn</button>
+      ${!u.banned ? `<button class="btn btn-danger btn-sm" onclick="permBan('${uid2}','${escHtml(uname)}')">Perm Ban</button>` : ''}
+      <button class="btn btn-primary" onclick="saveUser('${uid2}','${escHtml(uname)}',${canChangeRole})">Apply</button>
+    </div>`, true);
+};
+
+
+window.warnUser = function(uid2, uname) {
+  openModal(`<div class="modal-title">⚠️ Warn: ${uname}</div>
+    <div class="form-group">
+      <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+      <select class="form-select" id="mRuleSelect" onchange="
+        var sel=this;
+        var o=document.getElementById('mOtherWrap');
+        var btn=document.getElementById('mConfirmBtn');
+        if(sel.value==='other'){o.style.display='block';if(btn)btn.disabled=true;}
+        else{o.style.display='none';if(btn)btn.disabled=false;}
+        showRuleHint(sel.value,'mod');">
+        <option value="" disabled selected>Select a rule...</option>
+        <option value="01">01 — Be Respectful</option>
+        <option value="02">02 — No Spam</option>
+        <option value="03">03 — No NSFW Content</option>
+        <option value="04">04 — No Self-Promotion or Advertising</option>
+        <option value="05">05 — No Doxxing or Personal Info</option>
+        <option value="06">06 — Not Following Staff Instructions</option>
+        <option value="07">07 — Ban/Mute Evasion</option>
+        <option value="08">08 — English Only in General</option>
+        <option value="09">09 — Minimodding</option>
+        <option value="other">Other — please explain</option>
+      </select>
+    </div>
+    <div id="mOtherWrap" style="display:none" class="form-group">
+      <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+      <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:68px"
+        oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+    </div>
+    <div id="mRuleHint"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-warn" id="mConfirmBtn" disabled onclick="confirmWarn('${uid2}','${uname}')">Issue Warning</button>
+    </div>`);
+};
+
+window.confirmWarn = async function(uid2, uname) {
+  const reason = getModReason(); if(!reason) return;
+  const snap = await getDoc(doc(db,'users',uid2));
+  const cnt = (snap.data().warningsCount||0)+1;
+  await updateDoc(doc(db,'users',uid2), {
+    warningsCount:cnt,
+    punishmentHistory: arrayUnion({ type:'Warn', reason, at:Date.now() }),
+    pendingNotifications: arrayUnion({ type:'Warn', reason, issuedBy:email, at:Date.now() })
+  });
+  await writeLog(`Warned ${uname} — ${reason} (total: ${cnt})`);
+  closeModal(); users();
+};
+
+window.permBan = function(uid2, uname) {
+  openModal(`<div class="modal-title" style="color:var(--danger)">⛔ Perm Ban: ${uname}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">This is permanent and cannot be undone without Owner access.</div>
+    <div class="form-group">
+      <label class="form-label">Rule Broken <span style="color:var(--danger)">*</span></label>
+      <select class="form-select" id="mRuleSelect" onchange="
+        var o=document.getElementById('mOtherWrap');
+        var btn=document.getElementById('mConfirmBtn');
+        if(this.value==='other'){o.style.display='block';btn&&(btn.disabled=true);}
+        else{o.style.display='none';btn&&(btn.disabled=false);}
+        showRuleHint(this.value,'mod');
+      " required>
+        <option value="" disabled selected>Select a rule...</option>
+        <option value="01: Be Respectful">01 — Be Respectful</option>
+        <option value="02: No Spam">02 — No Spam</option>
+        <option value="03: No NSFW Content">03 — No NSFW Content</option>
+        <option value="04: No Self-Promotion or Advertising">04 — No Self-Promotion or Advertising</option>
+        <option value="05: No Doxxing or Personal Info">05 — No Doxxing or Personal Info</option>
+        <option value="06: Not Following Staff Instructions">06 — Not Following Staff Instructions</option>
+        <option value="07: Ban/Mute Evasion">07 — Ban/Mute Evasion</option>
+        <option value="08: English Only in General">08 — English Only in General</option>
+        <option value="09: Minimodding">09 — Minimodding</option>
+        <option value="other">Other — please explain</option>
+      </select>
+    </div>
+    <div id="mOtherWrap" style="display:none" class="form-group">
+      <label class="form-label">Explain <span style="color:var(--danger)">*</span></label>
+      <textarea class="form-textarea" id="mOtherText" placeholder="Describe what the user did..." style="min-height:72px"
+        oninput="var btn=document.getElementById('mConfirmBtn');if(btn)btn.disabled=this.value.trim().length<3;"></textarea>
+    </div>
+    <div id="mRuleHint"></div>    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" id="mConfirmBtn" disabled onclick="confirmPermBan('${uid2}','${uname}')">Permanently Ban</button>
+    </div>`);
+};
+window.confirmPermBan = async function(uid2, uname) {
+  const reason = getModReason(); if(!reason) return;
+  await updateDoc(doc(db,'users',uid2), {
+    banned:true,
+    punishmentHistory: arrayUnion({ type:'Perm Ban', reason, at:Date.now() }),
+    pendingNotifications: arrayUnion({ type:'Perm Ban', reason, issuedBy:email, at:Date.now() })
+  });
+  await writeLog(`Permanently banned ${uname} — ${reason}`);
+  closeModal(); users();
+};
+
+window.saveUser = async function(uid2, uname, canChangeRole) {
+  const reason  = getModReason()||''; if((document.getElementById('mMuteDur')?.value||document.getElementById('mTempBan')?.value)&&!reason)return;
+  const muteDur = document.getElementById('mMuteDur').value;
+  const tempDur = document.getElementById('mTempBan').value;
+  const staffNotes = document.getElementById('mStaffNotes')?.value.trim()??'';
+  const newRole = canChangeRole ? document.getElementById('mRole').value : null;
+  const updates = { staffNotes };
+  if (newRole) updates.role = newRole;
+  // If demoting from a staff role, record it so future applications show a warning
+  if(newRole && !['Staff','Mod','Senior Mod'].includes(newRole)){
+    const prevSnap=await getDoc(doc(db,'users',uid2));
+    const prevRole=prevSnap.exists()?prevSnap.data().role:'';
+    if(['Staff','Mod','Senior Mod'].includes(prevRole)) updates.previousRoles=arrayUnion(prevRole);
+  }
+  const history = [];
+  if (muteDur) {
+    const muteUntil = Date.now()+parseInt(muteDur);
+    updates.mutedUntil = new Date(muteUntil);
+    history.push({ type:'Mute', reason, at:Date.now() });
+    updates.pendingNotifications = arrayUnion({ type:'Mute', reason, until:muteUntil, issuedBy:email, at:Date.now() });
+  }
+  if (tempDur) {
+    updates.tempBannedUntil = new Date(Date.now()+parseInt(tempDur));
+    history.push({ type:'Temp Ban', reason, at:Date.now() });
+  }
+  if (history.length) updates.punishmentHistory = arrayUnion(...history);
+  if (Object.keys(updates).length) await updateDoc(doc(db,'users',uid2), updates);
+  await writeLog(`Updated user ${uname}`);
+
+  // Post welcome message when promoted to Staff
+  // (Mod can only promote to Staff, not Mod)
+  if (typeof newRole !== 'undefined' && newRole === 'Staff') {
+    const welcomeText = '⚡ Welcome to the team, @' + uname + '!\n\nYou now have access to the Staff Dashboard where you can manage tickets, warn and mute users, and escalate issues to Mods.\n\nIf you have any questions reach out to a Mod or the Owner. Welcome aboard! — NOVA Team';
+    await addDoc(collection(db,'channels','staff','messages'), {
+      text: welcomeText,
+      senderUid:'system', senderEmail:'NOVA System',
+      senderUsername:'NOVA System', senderRole:'System',
+      timestamp:Date.now(), system:true,
+    });
+  }
+
+  closeModal(); users();
+};
+
+
+
+// ── EMAIL ALERTS ─────────────────────────────────────────
+const EMAILJS_SERVICE  = 'service_mtcu1qo';
+const EMAILJS_TEMPLATE = 'template_6qgxi0f';
+const EMAILJS_KEY      = 'G7xmtT6VrVzxi1rfJ';
+const ALERT_EMAILS     = ['rhys.doughty@pgs.vic.edu.au','rhys97337@gmail.com'];
+async function sendAlert(subject, body) {
+  console.log('sendAlert called:', subject);
+  if(!window.emailjs){console.warn('EmailJS not loaded');return;}
+  const alerts = [
+    { service:'service_mtcu1qo', email:'rhys.doughty@pgs.vic.edu.au' },
+    { service:'service_mtcu1qo',  email:'rhys97337@gmail.com' },
+  ];
+  for(const a of alerts){
+    emailjs.send(a.service, 'template_6qgxi0f', {
+      to_email:   a.email,
+      subject:    '🚨 NOVA Alert: ' + subject,
+      body:       body + '\n\n---\nSent from NOVA at ' + new Date().toLocaleString(),
+      from_name:  'NOVA Security'
+    }, 'G7xmtT6VrVzxi1rfJ').catch(e=>console.warn('Alert failed for '+a.email, e));
+  }
+}
+
+window.triggerLockdown = async function() {
+  if(!confirm('Trigger EMERGENCY LOCKDOWN? This will lock out everyone except Owner and Senior Mods, and send an alert to the Owner.'))return;
+  await setDoc(doc(db,'settings','global'),{
+    emergency:true,
+    emergencyMessage:'🔒 Server is in lockdown. Please wait for staff to resolve the situation.',
+    lockdownTriggeredBy:email,lockdownAt:Date.now()
+  },{merge:true});
+  await writeLog('Triggered EMERGENCY LOCKDOWN');
+  sendAlert('Emergency Lockdown Activated',
+    'NOVA Emergency Lockdown was triggered by a Senior Mod.\n\n'+
+    '• Triggered by: '+email+'\n'+
+    '• Role: Senior Mod\n'+
+    '• Time: '+new Date().toLocaleString()+'\n\n'+
+    'Only Owner and Senior Mods can access NOVA.\n'+
+    'Log in to review and lift lockdown: https://join-nova.vercel.app/owner.html'
+  );
+  overview();
+};
+
+window.liftLockdown = async function() {
+  if(!confirm('Lift lockdown? This will restore normal access for all users.'))return;
+  await setDoc(doc(db,'settings','global'),{emergency:false,lockdownTriggeredBy:'',lockdownAt:0},{merge:true});
+  await writeLog('Lifted EMERGENCY LOCKDOWN');
+  overview();
+};
+
+
+const PUNISHMENT_GUIDE = {
+  "01": { label:"Be Respectful", rows:[
+    { sev:"low",      eg:"Minor rude comment",              staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Targeted insults / harassment",   staff:"Warn + Mute 1h",             mod:"Warn + Mute 2h" },
+    { sev:"high",     eg:"Sustained hate speech / slurs",   staff:"Alert Mod ⚠",                mod:"Temp Ban 3d" },
+  ]},
+  "02": { label:"No Spam", rows:[
+    { sev:"low",      eg:"Repeated messages",               staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Flooding a channel",              staff:"Mute 1h",                    mod:"Mute 2h + Warn" },
+    { sev:"high",     eg:"Bot spam / raid",                 staff:"Alert Mod ⚠",                mod:"Temp Ban 7d" },
+  ]},
+  "03": { label:"No NSFW Content", rows:[
+    { sev:"medium",   eg:"Inappropriate image or link",     staff:"Warn",                       mod:"Warn + Mute 6h" },
+    { sev:"high",     eg:"Explicit content",                staff:"Alert Mod ⚠",                mod:"Temp Ban 7d" },
+    { sev:"critical", eg:"CSAM or illegal content",         staff:"Alert Owner 🚨",              mod:"Perm Ban + log" },
+  ]},
+  "04": { label:"No Advertising", rows:[
+    { sev:"low",      eg:"Casual mention of own project",   staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Posting invite links or ads",     staff:"Warn + Mute 1h",             mod:"Mute 3h + Warn" },
+    { sev:"high",     eg:"Repeated or scam links",          staff:"Alert Mod ⚠",                mod:"Temp Ban 3d" },
+  ]},
+  "05": { label:"No Doxxing", rows:[
+    { sev:"high",     eg:"Sharing someone's private info",  staff:"Alert Mod ⚠",                mod:"Temp Ban 14d" },
+    { sev:"critical", eg:"Coordinated doxxing or threats",  staff:"Alert Mod ⚠",                mod:"Perm Ban" },
+  ]},
+  "06": { label:"Not Following Staff", rows:[
+    { sev:"low",      eg:"Ignored one warning",             staff:"Warn",                       mod:"Warn" },
+    { sev:"medium",   eg:"Repeatedly ignoring staff",       staff:"Mute 1h",                    mod:"Mute 3h + Warn" },
+    { sev:"high",     eg:"Openly defying moderation",       staff:"Alert Mod ⚠",                mod:"Temp Ban 1d" },
+  ]},
+  "07": { label:"Ban / Mute Evasion", rows:[
+    { sev:"high",     eg:"Alt account while muted",         staff:"Alert Mod ⚠",                mod:"Temp Ban 7d (both accounts)" },
+    { sev:"critical", eg:"Alt account while banned",        staff:"Alert Mod ⚠",                mod:"Perm Ban all accounts" },
+  ]},
+  "08": { label:"English Only in General", rows:[
+    { sev:"low",      eg:"Occasional non-English",          staff:"Remind",                     mod:"Remind" },
+    { sev:"medium",   eg:"Repeatedly ignoring reminder",    staff:"Warn",                       mod:"Warn + Mute 1h" },
+  ]},
+  "09": { label:"Minimodding", rows:[
+    { sev:"low",      eg:"Casually calling out users",      staff:"Remind",                     mod:"Remind" },
+    { sev:"medium",   eg:"Issuing fake warnings publicly",  staff:"Warn",                       mod:"Warn" },
+  ]},
+  "__hacking__": { label:"Hacking / Exploiting", rows:[
+    { sev:"critical", eg:"Exploiting platform code or bugs",staff:"Perm Ban + Alert Owner 🚨",  mod:"Perm Ban + Alert Owner 🚨" },
+    { sev:"critical", eg:"Attempting to compromise accounts",staff:"Perm Ban + Alert Owner 🚨", mod:"Perm Ban + Alert Owner 🚨" },
+  ]},
+};
+
+const SEV_CFG = {
+  low:      { col:"#3fb950", bg:"rgba(63,185,80,.12)",    label:"Low" },
+  medium:   { col:"#d29922", bg:"rgba(210,153,34,.12)",   label:"Medium" },
+  high:     { col:"#f85149", bg:"rgba(248,81,73,.12)",    label:"High" },
+  critical: { col:"#e040fb", bg:"rgba(224,64,251,.1)",    label:"Critical" },
+};
+
+function getModReason() {
+  const sel = document.getElementById('mRuleSelect');
+  if (!sel || !sel.value) { alert('Please select a rule before continuing.'); return null; }
+  if (sel.value === 'other') {
+    const txt = (document.getElementById('mOtherText')?.value||'').trim();
+    if (txt.length < 3) { alert('Please describe the reason (at least 3 characters).'); return null; }
+    return 'Other: ' + txt;
+  }
+  const guide = PUNISHMENT_GUIDE[sel.value];
+  return (guide ? guide.label : sel.value);
+}
+
+window.showRuleHint = function showRuleHint(val, role) {
+  const wrap = document.getElementById('mRuleHint');
+  if (!wrap) return;
+  if (!val || val === 'other') { wrap.innerHTML = ''; return; }
+  const guide = PUNISHMENT_GUIDE[val];
+  if (!guide) { wrap.innerHTML = ''; return; }
+  const rows = guide.rows.map(r => {
+    const s = SEV_CFG[r.sev] || SEV_CFG.low;
+    const action = role === 'staff' ? r.staff : r.mod;
+    const isOwner = action.includes('Owner');
+    const isMod   = action.includes('Mod');
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:700;color:${s.col};background:${s.bg};padding:2px 8px;border-radius:8px;font-family:var(--mono);flex-shrink:0;min-width:62px;text-align:center">${s.label}</span>
+      <span style="font-size:11px;color:var(--text-muted);flex:1;line-height:1.4">${r.eg}</span>
+      <span style="font-size:11px;font-weight:700;flex-shrink:0;color:${isOwner?'#e040fb':isMod?'#d29922':'var(--text)'}">${action}</span>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+    <div style="font-family:var(--mono);font-size:8px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Rule: ${guide.label}</div>
+    <div style="border-top:1px solid var(--border)">${rows}</div>
+  </div>`;
+}
+
+function renderGuide(containerId, role) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const keys = ["01","02","03","04","05","06","07","08","09","__hacking__"];
+  wrap.innerHTML = keys.map(key => {
+    const rule = PUNISHMENT_GUIDE[key];
+    if (!rule) return '';
+    const isHack = key === '__hacking__';
+    const rowsHtml = rule.rows.map(r => {
+      const s = SEV_CFG[r.sev] || SEV_CFG.low;
+      const action = role === 'staff' ? r.staff : r.mod;
+      const isOwner = action.includes('Owner');
+      const isMod   = action.includes('Mod');
+      return `<tr>
+        <td style="padding:7px 12px;width:90px"><span style="display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:${s.bg};color:${s.col};font-family:var(--mono)">${s.label}</span></td>
+        <td style="padding:7px 12px;font-size:12px;color:var(--text-muted)">${r.eg}</td>
+        <td style="padding:7px 12px;font-size:12px;font-weight:600;color:${isOwner?'#e040fb':isMod?'#d29922':'var(--text)'}">${action}</td>
+      </tr>`;
+    }).join('');
+    return `<div style="background:var(--surface1);border:1px solid ${isHack?'rgba(224,64,251,.3)':'var(--border)'};border-radius:10px;margin-bottom:12px;overflow:hidden">
+      <div style="padding:10px 14px;background:${isHack?'rgba(224,64,251,.06)':'var(--surface2)'};border-bottom:1px solid ${isHack?'rgba(224,64,251,.2)':'var(--border)'};display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:700">${isHack?'🚨 ':''} ${rule.label}</span>
+        ${isHack?'<span style="margin-left:auto;font-family:var(--mono);font-size:9px;color:#e040fb;background:rgba(224,64,251,.1);border:1px solid rgba(224,64,251,.3);padding:2px 8px;border-radius:10px">ALERT OWNER IMMEDIATELY</span>':''}
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600">SEVERITY</th>
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600">EXAMPLE</th>
+          <th style="text-align:left;padding:6px 12px;font-size:10px;font-family:var(--mono);letter-spacing:1px;color:var(--text-dim);font-weight:600;width:180px">ACTION</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+function guidePanel() {
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="panel-title">📋 Punishment Guide</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">
+      Reference for punishments — use your judgement, context always matters.
+      <span style="color:#e040fb;font-weight:600">Critical</span> offences escalate to Owner immediately.
+    </div>
+    <div id="guideContent"></div>
+  </div>`;
+  renderGuide('guideContent', 'mod');
+}
+
+// ══════════════════════════════════════════════════════════
+// LOGS
+// ══════════════════════════════════════════════════════════
+async function logs() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(query(collection(db,'logs'), orderBy('timestamp','desc'), limit(50)));
+  const rows = snap.docs.map(d => {
+    const l=d.data();
+    return `<div class="log-entry"><span class="log-time">${ts(l.timestamp)}</span><span class="log-user">${l.user||'—'}</span><span class="log-action">${l.action}</span></div>`;
+  }).join('') || '<div class="empty">No logs</div>';
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel"><div class="panel-title">System Logs</div>
+    <div class="card" style="padding:0">${rows}</div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════
+// ALERTS
+// ══════════════════════════════════════════════════════════
+async function alerts() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const now = Date.now();
+  const tenMins = now - 10*60*1000;
+  const oneHour = now - 60*60*1000;
+  const oneDaySec = now - 24*60*60*1000;
+
+  const [appealSnap, lockSnap, recentUsersSnap, recentBansSnap] = await Promise.all([
+    // Ban/mute appeals
+    getDocs(query(collection(db,'tickets'), where('category','in',['ban_appeal','mute_appeal']), orderBy('timestamp','desc'), limit(25))),
+    // Lockdown events
+    getDocs(query(collection(db,'logs'), where('action','>=','Triggered'), orderBy('action'), orderBy('timestamp','desc'), limit(10))),
+    // Recent signups for raid detection
+    getDocs(query(collection(db,'users'), where('joinedAt','>',tenMins), orderBy('joinedAt','desc'))),
+    // Recent perm bans in last 24h (unusual spike could indicate abuse)
+    getDocs(query(collection(db,'logs'), where('action','>=','Permanently banned'), orderBy('action'), orderBy('timestamp','desc'), limit(10))),
+  ]);
+
+  const items = [];
+
+  // 🚨 RAID DETECTION — 5+ signups in 10 minutes
+  const recentJoins = recentUsersSnap.docs.length;
+  if(recentJoins >= 5){
+    items.push({ ts: now, priority: 0, html: `
+      <div class="alert-entry" style="border-left:3px solid #e040fb">
+        <div class="alert-meta">
+          <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:#e040fb;background:rgba(224,64,251,.12);padding:1px 7px;border-radius:8px">🚨 POSSIBLE RAID</span>
+          <span class="alert-time">Now</span>
+        </div>
+        <div class="alert-text"><strong>${recentJoins} new accounts</strong> created in the last 10 minutes. Consider triggering Emergency Lockdown.</div>
+      </div>`
+    });
+  }
+
+  // ⚠ SUSPICIOUS — 3-4 signups in 10 mins (warning level)
+  else if(recentJoins >= 3){
+    items.push({ ts: now, priority: 1, html: `
+      <div class="alert-entry" style="border-left:3px solid var(--warn)">
+        <div class="alert-meta">
+          <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--warn);background:rgba(210,153,34,.12);padding:1px 7px;border-radius:8px">⚠ SUSPICIOUS</span>
+          <span class="alert-time">Now</span>
+        </div>
+        <div class="alert-text"><strong>${recentJoins} new accounts</strong> in the last 10 minutes. Monitor closely.</div>
+      </div>`
+    });
+  }
+
+  // 🔒 Lockdown events
+  lockSnap.docs.forEach(d => {
+    const l = d.data();
+    items.push({ ts: l.timestamp, priority: 1, html: `
+      <div class="alert-entry" style="border-left:3px solid #e040fb">
+        <div class="alert-meta">
+          <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:#e040fb;background:rgba(224,64,251,.1);padding:1px 7px;border-radius:8px">🔒 LOCKDOWN</span>
+          <span class="alert-sender">${escHtml(l.user||'?')}</span>
+          <span class="alert-time">${ts(l.timestamp)}</span>
+        </div>
+        <div class="alert-text">${escHtml(l.action||'')}</div>
+      </div>`
+    });
+  });
+
+  // 🚫 Ban/mute appeals
+  appealSnap.docs.forEach(d => {
+    const t = d.data(); const tid = d.id;
+    const isBan = t.category === 'ban_appeal';
+    const color = isBan ? 'var(--danger)' : 'var(--warn)';
+    const bg    = isBan ? 'rgba(248,81,73,.1)' : 'rgba(210,153,34,.1)';
+    const label = isBan ? '🚫 Ban Appeal' : '🔇 Mute Appeal';
+    items.push({ ts: t.timestamp, priority: 2, html: `
+      <div class="alert-entry" style="cursor:pointer;border-left:3px solid ${color}" onclick="openTicket('${tid}')">
+        <div class="alert-meta">
+          <span style="font-family:var(--mono);font-size:9px;font-weight:700;color:${color};background:${bg};padding:1px 7px;border-radius:8px">${label}</span>
+          <span class="alert-sender">${escHtml(t.createdByUsername||t.createdBy||'?')}</span>
+          <span class="alert-time">${ts(t.timestamp)}</span>
+          ${t.status==='open'?'<span style="font-family:var(--mono);font-size:8px;color:var(--success);background:rgba(63,185,80,.1);padding:1px 6px;border-radius:8px">OPEN</span>':''}
+        </div>
+        <div class="alert-text">${escHtml(t.subject||'No subject')} — <span style="color:var(--text-muted)">${escHtml((t.message||'').slice(0,80))}${(t.message||'').length>80?'…':''}</span></div>
+      </div>`
+    });
+  });
+
+  // Sort by priority then timestamp
+  items.sort((a,b) => a.priority-b.priority || (b.ts||0)-(a.ts||0));
+  const rows = items.length ? items.map(i=>i.html).join('') : '<div class="empty">No alerts</div>';
+
+  document.getElementById('mainContent').innerHTML = `
+  <div class="panel">
+    <div class="panel-title">◬ Alerts</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;line-height:1.6">
+      Live suspicious activity, ban/mute appeals, and lockdown events. Click an appeal to open the ticket.
+    </div>
+    <div class="card" style="padding:0">${rows}</div>
+  </div>`;
+}
+
+overview();
+// ── MY TICKETS ────────────────────────────────────────────
+async function mytickets() {
+  document.getElementById('mainContent').innerHTML = '<div class="empty">Loading...</div>';
+  const snap = await getDocs(collection(db,'tickets'));
+  const mine = snap.docs.filter(d => {
+    const t = d.data();
+    return t.assignedTo === email;
+  });
+
+  if (!mine.length) {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="panel"><div class="panel-title">My Assigned Tickets</div>
+        <div class="empty" style="padding:48px">No tickets assigned to you yet</div>
+      </div>`;
+    return;
+  }
+
+  const rows = mine.map(d => {
+    const t = d.data(); const id = d.id;
+    const sp = {open:'pill-open',in_progress:'pill-progress',closed:'pill-closed'}[t.status]||'pill-none';
+    const pp = t.priority==='high'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(248,81,73,0.15);color:var(--danger);padding:1px 6px;border-radius:2px;margin-left:5px">HIGH</span>'
+      : t.priority==='medium'
+      ? '<span style="font-family:var(--mono);font-size:9px;background:rgba(210,153,34,0.15);color:var(--warn);padding:1px 6px;border-radius:2px;margin-left:5px">MED</span>' : '';
+    return `<tr>
+      <td><span style="cursor:pointer;color:var(--text);font-weight:600" onclick="openTicket('${id}')">${escHtml(t.subject||'—')}</span>${pp}</td>
+      <td class="mono" style="font-size:11px">${t.createdBy||'—'}</td>
+      <td><span class="pill ${sp}">${t.status||'open'}</span></td>
+      <td class="mono" style="font-size:11px">${ts(t.timestamp)}</td>
+      <td><button class="btn btn-sm" onclick="openTicket('${id}')">Open</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="panel"><div class="panel-title">My Assigned Tickets (${mine.length})</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Subject</th><th>Created By</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+
+overview();
+if(window._modDrain)window._modDrain();
+</script>
+
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <button class="mobile-sidebar-btn" id="mobileSidebarBtn" onclick="toggleMobileSidebar()">☰</button>
+  <script>
+  function toggleMobileSidebar(){
+    document.querySelector('.sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('open');
+  }
+  function closeSidebar(){
+    document.querySelector('.sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('open');
+  }
+  // Close sidebar when nav button clicked on mobile
+  document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>{
+    if(window.innerWidth<=768) closeSidebar();
+  }));
+  </script>
+</body>
+</html>
