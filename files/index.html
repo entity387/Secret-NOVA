@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="midnight">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOVA — Login</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --accent: #7c3aed;
+  --accent2: #a855f7;
+  --accent3: #c084fc;
+  --accent-glow: rgba(124,58,237,0.4);
+  --text: #e6edf3;
+  --text-muted: #7d8590;
+  --text-dim: #484f58;
+  --surface: rgba(13,17,23,0.85);
+  --surface2: rgba(22,27,34,0.9);
+  --border: rgba(33,38,45,0.8);
+  --danger: #f85149;
+  --success: #3fb950;
+  --mono: 'Share Tech Mono', monospace;
+  --ui: 'Inter', sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: #050508;
+  color: var(--text);
+  font-family: var(--ui);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ── STAR CANVAS ─────────────────────────────────────────── */
+#starCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+/* ── AMBIENT ORBS ────────────────────────────────────────── */
+.orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 1;
+}
+.orb-1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%);
+  top: -100px; left: -100px;
+  animation: orbFloat1 12s ease-in-out infinite;
+}
+.orb-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(168,85,247,0.08) 0%, transparent 70%);
+  bottom: -80px; right: -80px;
+  animation: orbFloat2 15s ease-in-out infinite;
+}
+.orb-3 {
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(192,132,252,0.06) 0%, transparent 70%);
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  animation: orbFloat3 10s ease-in-out infinite;
+}
+
+@keyframes orbFloat1 {
+  0%,100%{transform:translate(0,0)}
+  33%{transform:translate(30px,20px)}
+  66%{transform:translate(-20px,30px)}
+}
+@keyframes orbFloat2 {
+  0%,100%{transform:translate(0,0)}
+  33%{transform:translate(-25px,-15px)}
+  66%{transform:translate(20px,-25px)}
+}
+@keyframes orbFloat3 {
+  0%,100%{transform:translate(-50%,-50%) scale(1)}
+  50%{transform:translate(-50%,-50%) scale(1.2)}
+}
+
+/* ── LOGIN WRAP ──────────────────────────────────────────── */
+.login-wrap {
+  position: relative;
+  z-index: 10;
+  width: 420px;
+  animation: loginReveal 0.8s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+@keyframes loginReveal {
+  from { opacity:0; transform:translateY(30px) scale(0.95); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+
+/* ── LOGO ────────────────────────────────────────────────── */
+.logo-area {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.logo-name {
+  font-family: var(--mono);
+  font-size: 52px;
+  letter-spacing: 14px;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: logoPulse 3s ease-in-out infinite;
+  display: block;
+  margin-bottom: 4px;
+}
+
+@keyframes logoPulse {
+  0%,100% { filter: drop-shadow(0 0 8px rgba(124,58,237,0.4)); }
+  50%     { filter: drop-shadow(0 0 20px rgba(168,85,247,0.6)); }
+}
+
+.logo-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  animation: fadeIn 1s ease 0.3s both;
+}
+
+.logo-line {
+  width: 80px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent2), transparent);
+  margin: 12px auto 0;
+  animation: lineExpand 0.8s ease 0.5s both;
+}
+
+@keyframes lineExpand {
+  from { width: 0; opacity: 0; }
+  to   { width: 80px; opacity: 1; }
+}
+
+/* ── CARD ────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 36px;
+  box-shadow:
+    0 0 0 1px rgba(124,58,237,0.1),
+    0 20px 60px rgba(0,0,0,0.6),
+    0 0 80px rgba(124,58,237,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  position: relative;
+  overflow: hidden;
+  animation: borderGlow 4s ease-in-out infinite;
+}
+
+@keyframes borderGlow {
+  0%,100% { box-shadow: 0 0 0 1px rgba(124,58,237,0.1), 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(124,58,237,0.05), inset 0 1px 0 rgba(255,255,255,0.06); }
+  50%     { box-shadow: 0 0 0 1px rgba(168,85,247,0.25), 0 20px 60px rgba(0,0,0,0.6), 0 0 60px rgba(124,58,237,0.12), inset 0 1px 0 rgba(255,255,255,0.08); }
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; right: -100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(168,85,247,0.5), transparent);
+  animation: cardShimmer 4s ease-in-out infinite;
+}
+
+@keyframes cardShimmer {
+  0%   { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* ── FIELD GROUP ─────────────────────────────────────────── */
+.field-group {
+  margin-bottom: 18px;
+  animation: fieldSlide 0.5s ease both;
+}
+.field-group:nth-child(1) { animation-delay: 0.1s; }
+.field-group:nth-child(2) { animation-delay: 0.2s; }
+.field-group:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes fieldSlide {
+  from { opacity:0; transform: translateX(-10px); }
+  to   { opacity:1; transform: none; }
+}
+
+label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  transition: color 0.2s;
+}
+
+.field-group:focus-within label { color: var(--accent3); }
+
+.input-wrap {
+  position: relative;
+}
+
+input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid rgba(33,38,45,0.8);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 13px 16px;
+  outline: none;
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+
+input:focus {
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.2), 0 0 20px rgba(124,58,237,0.1);
+  background: rgba(28,33,42,0.95);
+}
+
+input::placeholder { color: rgba(72,79,88,0.8); }
+
+/* ── BUTTONS ─────────────────────────────────────────────── */
+.btn-login {
+  width: 100%;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%);
+  background-size: 200% auto;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: var(--ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  padding: 14px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+  margin-top: 8px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.35);
+  animation: fieldSlide 0.5s ease 0.35s both;
+}
+
+.btn-login::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+  background-size: 200% auto;
+  animation: btnShimmer 3s linear infinite;
+}
+
+@keyframes btnShimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.btn-login:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(124,58,237,0.5);
+  background-position: right center;
+}
+
+.btn-login:active { transform: translateY(0) scale(0.98); }
+
+.btn-login:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Loading state */
+.btn-login.loading {
+  pointer-events: none;
+}
+
+.btn-login.loading::after {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── DIVIDER ─────────────────────────────────────────────── */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 16px;
+  animation: fieldSlide 0.5s ease 0.4s both;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.divider span {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+/* ── CREATE ACCOUNT LINK ─────────────────────────────────── */
+.create-link {
+  display: block;
+  text-align: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-family: var(--ui);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 11px;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+  animation: fieldSlide 0.5s ease 0.45s both;
+}
+.create-link:hover {
+  border-color: var(--accent2);
+  color: var(--accent3);
+  background: rgba(124,58,237,0.08);
+  transform: translateY(-1px);
+}
+
+/* ── ERROR / STATUS ──────────────────────────────────────── */
+.error-msg {
+  background: rgba(248,81,73,0.1);
+  border: 1px solid rgba(248,81,73,0.3);
+  border-radius: 8px;
+  color: var(--danger);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 10px 14px;
+  margin-top: 14px;
+  display: none;
+  animation: slideDown 0.3s ease;
+}
+
+.success-msg {
+  background: rgba(63,185,80,0.1);
+  border: 1px solid rgba(63,185,80,0.3);
+  border-radius: 8px;
+  color: var(--success);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 10px 14px;
+  margin-top: 14px;
+  display: none;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from { opacity:0; transform: translateY(-8px); }
+  to   { opacity:1; transform: none; }
+}
+
+.status-bar {
+  margin-top: 16px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  min-height: 16px;
+}
+
+/* ── LOCKOUT ─────────────────────────────────────────────── */
+.lockout {
+  position: fixed; inset: 0;
+  background: rgba(5,5,8,0.97);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  animation: fadeIn 0.3s ease;
+}
+
+.lockout-card {
+  text-align: center;
+  max-width: 480px;
+  padding: 48px;
+  border: 1px solid rgba(248,81,73,0.2);
+  border-radius: 20px;
+  background: rgba(13,17,23,0.9);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 0 60px rgba(248,81,73,0.08);
+  animation: springIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+@keyframes springIn {
+  from { opacity:0; transform: scale(0.85) translateY(20px); }
+  to   { opacity:1; transform: scale(1) translateY(0); }
+}
+
+.lockout-icon { font-size: 44px; margin-bottom: 20px; }
+.lockout-title { font-family: var(--mono); font-size: 16px; letter-spacing: 4px; color: var(--danger); margin-bottom: 12px; text-transform: uppercase; }
+.lockout-msg { color: var(--text-muted); font-size: 15px; line-height: 1.7; }
+
+/* ── REGISTER MODAL ──────────────────────────────────────── */
+#registerModal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(8px);
+}
+
+.register-card {
+  background: rgba(13,17,23,0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(124,58,237,0.2);
+  border-radius: 16px;
+  padding: 36px;
+  width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 40px rgba(124,58,237,0.1);
+  animation: springIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.register-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #7c3aed, #a855f7, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(33,38,45,0.8);
+}
+
+.register-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-cancel {
+  flex: 1;
+  background: none;
+  border: 1px solid rgba(33,38,45,0.8);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-family: var(--ui);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-cancel:hover { border-color: var(--accent2); color: var(--accent3); }
+
+.btn-register {
+  flex: 2;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: var(--ui);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  padding: 12px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.25s;
+  box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+}
+.btn-register:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(124,58,237,0.4); }
+.btn-register:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.register-note {
+  text-align: center;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* ── MOBILE ──────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .login-wrap { width: 100%; padding: 20px 16px; }
+  .logo-name { font-size: 38px; letter-spacing: 10px; }
+  .card { padding: 24px 20px; border-radius: 12px; }
+  .btn-login { font-size: 14px; padding: 13px; }
+  .register-card { width: 92vw; padding: 24px 20px; }
+  input { font-size: 16px; } /* Prevents iOS zoom on focus */
+}
+</style>
+</head>
+<body>
+<!-- ═══════════════════════════════════════════════════
+     NOVA SHUTDOWN CONTROL
+     When it's time: change NOVA_SHUTDOWN to true
+     ═══════════════════════════════════════════════════ -->
+<script>
+  const NOVA_SHUTDOWN = false;
+  if(NOVA_SHUTDOWN){
+    document.addEventListener('DOMContentLoaded', ()=>{
+      document.body.innerHTML = `
+        <div style="min-height:100vh;background:#0a0a0a;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;padding:24px">
+          <div style="max-width:520px;width:100%;text-align:center">
+            <div style="color:#00ff41;font-family:'VT323',monospace;font-size:48px;margin-bottom:8px;text-shadow:0 0 20px #00ff41">NOVA</div>
+            <div style="color:#005514;font-size:11px;letter-spacing:4px;margin-bottom:48px">2025 — 2026</div>
+            <div style="color:#00a82a;font-size:15px;line-height:2;margin-bottom:48px">
+              Nova is now closed.<br><br>
+              Thank you for being part of it.<br>
+              It was small. It was ours.<br>
+              That was enough.
+            </div>
+            <div style="border-top:1px solid #111;padding-top:32px;color:#005514;font-size:12px;line-height:2">
+              Someone Like You is still out there.<br>
+              If you want to find it, you will.<br><br>
+              — Rhys
+            </div>
+          </div>
+        </div>
+      `;
+    });
+  }
+</script>
+<div style="background:linear-gradient(135deg,#1a0a0a,#2a0f0f);border-bottom:1px solid #5a1a1a;padding:12px 20px;display:flex;align-items:center;gap:12px">
+  <span style="font-size:16px">⚠️</span>
+  <div>
+    <div style="color:#ff6b6b;font-weight:700;font-size:12px;letter-spacing:0.5px">NOVA IS SHUTTING DOWN</div>
+    <div style="color:#cc8888;font-size:11px;margin-top:2px">Nova will officially close at the end of June 2026. Thank you for being part of it. — Rhys</div>
+  </div>
+</div>
+
+<canvas id="starCanvas"></canvas>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<div class="lockout" id="lockoutOverlay">
+  <div class="lockout-card">
+    <div class="lockout-icon" id="lockoutIcon">🔒</div>
+    <div class="lockout-title" id="lockoutTitle">SYSTEM LOCKED</div>
+    <div class="lockout-msg" id="lockoutMsg">Access restricted.</div>
+    <div id="lockoutAppealWrap" style="display:none;margin-top:20px;display:none"></div>
+  </div>
+</div>
+
+<div class="login-wrap">
+  <div class="logo-area">
+    <span class="logo-name">NOVA</span>
+    <div class="logo-sub">Chatting Platform</div>
+    <div class="logo-line"></div>
+  </div>
+
+  <!-- OG Counter -->
+  <div id="ogCounter" style="text-align:center;margin-bottom:16px;animation:fadeUp 0.6s ease 0.4s both;">
+    <div style="display:inline-flex;align-items:center;gap:10px;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.25);border-radius:20px;padding:8px 18px;">
+      <span style="font-size:16px">🌟</span>
+      <div>
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:rgba(255,215,0,0.6);text-transform:uppercase;margin-bottom:2px">OG Early Access</div>
+        <div id="ogSpotsText" style="font-family:var(--mono);font-size:13px;color:#ffd700;font-weight:700">Loading...</div>
+      </div>
+      <span style="font-size:16px">🌟</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-top:6px;letter-spacing:1px">First 20 users get a permanent OG badge</div>
+  </div>
+
+  <div class="card">
+    <div class="field-group">
+      <label>Email Address</label>
+      <input type="email" id="emailInput" placeholder="user@domain.com" autocomplete="email">
+    </div>
+    <div class="field-group">
+      <label>Password</label>
+      <input type="password" id="passInput" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-login" id="loginBtn" onclick="doLogin()">Login</button>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="success-msg" id="successMsg"></div>
+    <div class="divider"><span>or</span></div>
+    <button class="create-link" onclick="openRegister()">Create an account</button>
+  </div>
+  <div class="status-bar" id="statusBar"></div>
+</div>
+
+<!-- REGISTER MODAL -->
+<div id="registerModal">
+  <div class="register-card">
+    <div class="register-title">Create Account</div>
+    <div class="field-group">
+      <label>Username</label>
+      <input type="text" id="regUsername" placeholder="Your display name">
+    </div>
+    <div class="field-group">
+      <label>Email Address</label>
+      <input type="email" id="regEmail" placeholder="user@domain.com">
+    </div>
+    <div class="field-group">
+      <label>Password</label>
+      <input type="password" id="regPass" placeholder="Min 6 characters">
+    </div>
+    <div class="field-group">
+      <label>Confirm Password</label>
+      <input type="password" id="regPass2" placeholder="Repeat password">
+    </div>
+    <div class="error-msg" id="regError" style="display:none"></div>
+    <div class="register-actions">
+      <button class="btn-cancel" onclick="closeRegister()">Cancel</button>
+      <button class="btn-register" id="regBtn" onclick="doRegister()">Register</button>
+    </div>
+    <div class="register-note">Accounts start as User role</div>
+  </div>
+</div>
+
+
+<script>
+function showLockout(icon, title, msg) {
+  document.getElementById('lockoutIcon').textContent  = icon;
+  document.getElementById('lockoutTitle').textContent = title;
+  document.getElementById('lockoutMsg').textContent   = msg;
+  document.getElementById('lockoutOverlay').style.display = 'flex';
+}
+
+function showLockoutAppeal(uid, userData, category) {
+  const wrap = document.getElementById('lockoutAppealWrap');
+  if (!wrap) return;
+  wrap.style.cssText = 'display:block;margin-top:20px';
+  // Store data on window to avoid escaping issues in onclick
+  window._appealData = { uid, email: userData.email||'', username: userData.username||userData.email||'', category };
+  wrap.innerHTML = `<button onclick="openAppealModal()" style="background:none;border:1px solid rgba(248,81,73,.4);color:#f85149;font-size:13px;font-weight:600;padding:10px 24px;border-radius:10px;cursor:pointer;font-family:inherit">
+    🎫 Submit Appeal
+  </button>`;
+}
+
+let _appealDb = null;
+function openAppealModal() {
+  const { uid, email, username, category } = window._appealData || {};
+  if (!uid) return;
+  document.querySelectorAll('#_appealModal').forEach(e=>e.remove());
+  const el = document.createElement('div');
+  el.id = '_appealModal';
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(8px)';
+  el.innerHTML = `
+    <div style="background:#161b22;border:1px solid #21262d;border-radius:12px;padding:26px;width:92%;max-width:440px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+      <div style="font-family:monospace;font-size:10px;letter-spacing:3px;color:#8b949e;text-transform:uppercase;margin-bottom:14px;padding-bottom:11px;border-bottom:1px solid #21262d">🎫 Submit Appeal</div>
+      <div style="padding:10px 12px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);border-radius:8px;font-size:12px;color:#8b949e;line-height:1.6;margin-bottom:14px">
+        Be honest and explain your situation clearly. Abusing the appeal system may result in further punishment.
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;font-family:monospace;display:block;margin-bottom:4px">Subject</label>
+        <input id="appealSubject" value="Ban Appeal — ${username}" style="width:100%;background:#0d1117;border:1px solid #21262d;border-radius:8px;color:#e6edf3;font-size:13px;padding:8px 11px;outline:none;box-sizing:border-box">
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:1px;font-family:monospace;display:block;margin-bottom:4px">Explain your situation *</label>
+        <textarea id="appealMessage" placeholder="Explain what happened, why you think the punishment was unfair, and what you'll do differently..." style="width:100%;background:#0d1117;border:1px solid #21262d;border-radius:8px;color:#e6edf3;font-size:13px;padding:8px 11px;outline:none;min-height:110px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button onclick="document.getElementById('_appealModal').remove()" style="background:none;border:1px solid #21262d;color:#8b949e;padding:7px 16px;border-radius:8px;cursor:pointer;font-size:12px">Cancel</button>
+        <button id="appealSubmitBtn" onclick="submitLoginAppeal()" style="background:linear-gradient(135deg,#7c3aed,#a855f7);border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600">Submit Appeal</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+}
+
+async function submitLoginAppeal() {
+  const { uid, email, username, category } = window._appealData || {};
+  if (!uid) return;
+  const subject = document.getElementById('appealSubject')?.value.trim();
+  const message = document.getElementById('appealMessage')?.value.trim();
+  if (!message || message.length < 10) { alert('Please explain your situation in more detail.'); return; }
+  const btn = document.getElementById('appealSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+  try {
+    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
+    const { getFirestore, collection, addDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const fbCfg = {apiKey:"AIzaSyClEfbrTpSwVPpThWZJukobJN9tCKMXTx4",authDomain:"nova-7a26f.firebaseapp.com",projectId:"nova-7a26f"};
+    const app = getApps().length ? getApps()[0] : initializeApp(fbCfg);
+    const db2 = getFirestore(app);
+    await addDoc(collection(db2,'tickets'), {
+      subject: subject || ('Ban Appeal — ' + username),
+      message, priority:'high', category,
+      createdBy: email, createdByUid: uid, createdByUsername: username,
+      assignedTo:'', status:'open', timestamp: Date.now(),
+      escalationLevel:'none', escalationReason:'', escalatedBy:''
+    });
+    document.getElementById('_appealModal')?.remove();
+    const wrap = document.getElementById('lockoutAppealWrap');
+    if (wrap) wrap.innerHTML = '<div style="color:#3fb950;font-size:13px;margin-top:4px;font-family:monospace">✅ Appeal submitted — we\'ll review it soon.</div>';
+  } catch(e) {
+    alert('Failed: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Appeal'; }
+  }
+}
+
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyClEfbrTpSwVPpThWZJukobJN9tCKMXTx4",
+  authDomain: "nova-7a26f.firebaseapp.com",
+  projectId: "nova-7a26f",
+  storageBucket: "nova-7a26f.firebasestorage.app",
+  messagingSenderId: "98300801242",
+  appId: "1:98300801242:web:77c16453b6dac8fed3b5e3",
+  measurementId: "G-67N1G1RFMS"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ── STAR CANVAS ───────────────────────────────────────────
+const canvas = document.getElementById('starCanvas');
+const ctx    = canvas.getContext('2d');
+let stars = [];
+let W, H;
+
+function resizeCanvas() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+
+function createStars() {
+  stars = [];
+  const count = Math.floor((W * H) / 3000);
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.5 + 0.2,
+      speed: Math.random() * 0.3 + 0.05,
+      opacity: Math.random() * 0.8 + 0.2,
+      twinkleSpeed: Math.random() * 0.02 + 0.005,
+      twinkleOffset: Math.random() * Math.PI * 2,
+      layer: Math.floor(Math.random() * 3) + 1,
+    });
+  }
+  // Add a few shooting stars
+  for (let i = 0; i < 3; i++) {
+    stars.push({
+      x: Math.random() * W, y: Math.random() * H * 0.5,
+      r: 0.8, speed: 0, opacity: 0,
+      isShooting: true,
+      shootX: 0, shootY: 0,
+      active: false,
+      nextShoot: Date.now() + Math.random() * 8000 + 4000,
+    });
+  }
+}
+
+let frame = 0;
+function animateStars() {
+  ctx.clearRect(0, 0, W, H);
+  frame++;
+  const now = Date.now();
+
+  stars.forEach(s => {
+    if (s.isShooting) {
+      if (!s.active && now > s.nextShoot) {
+        s.active = true;
+        s.x = Math.random() * W * 0.7;
+        s.y = Math.random() * H * 0.4;
+        s.shootX = s.x;
+        s.shootY = s.y;
+        s.progress = 0;
+        s.opacity = 1;
+        s.length = Math.random() * 150 + 80;
+        s.angle = Math.PI / 4 + (Math.random() * 0.3 - 0.15);
+      }
+      if (s.active) {
+        s.progress += 4;
+        s.opacity = Math.max(0, 1 - s.progress / s.length);
+        const ex = s.x + Math.cos(s.angle) * s.progress;
+        const ey = s.y + Math.sin(s.angle) * s.progress;
+        const grad = ctx.createLinearGradient(s.x, s.y, ex, ey);
+        grad.addColorStop(0, `rgba(168,85,247,0)`);
+        grad.addColorStop(0.5, `rgba(192,132,252,${s.opacity * 0.8})`);
+        grad.addColorStop(1, `rgba(255,255,255,${s.opacity})`);
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(ex, ey);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        if (s.progress >= s.length) {
+          s.active = false;
+          s.nextShoot = now + Math.random() * 10000 + 5000;
+        }
+      }
+      return;
+    }
+
+    // Parallax drift
+    s.x -= s.speed * s.layer * 0.15;
+    if (s.x < 0) s.x = W;
+
+    // Twinkle
+    const twinkle = (Math.sin(frame * s.twinkleSpeed + s.twinkleOffset) + 1) / 2;
+    const opacity = s.opacity * (0.4 + twinkle * 0.6);
+
+    // Colour based on layer
+    const colours = ['255,255,255', '192,132,252', '147,197,253'];
+    const colour  = colours[s.layer - 1] || colours[0];
+
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${colour},${opacity})`;
+    ctx.fill();
+
+    // Glow for brighter stars
+    if (s.r > 1.2) {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${colour},${opacity * 0.08})`;
+      ctx.fill();
+    }
+  });
+
+  requestAnimationFrame(animateStars);
+}
+
+resizeCanvas();
+createStars();
+animateStars();
+window.addEventListener('resize', () => { resizeCanvas(); createStars(); });
+
+// ── ADD RIPPLE TO BUTTONS ─────────────────────────────────
+document.querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', function(e) {
+    const rect = btn.getBoundingClientRect();
+    const ripple = document.createElement('span');
+    ripple.style.cssText = `position:absolute;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.15);top:${e.clientY-rect.top-15}px;left:${e.clientX-rect.left-15}px;animation:rippleEffect 0.6s ease-out;pointer-events:none`;
+    btn.style.position = 'relative';
+    btn.style.overflow = 'hidden';
+    btn.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
+  });
+});
+
+const style = document.createElement('style');
+style.textContent = '@keyframes rippleEffect{0%{transform:scale(0);opacity:0.6}100%{transform:scale(6);opacity:0}}';
+document.head.appendChild(style);
+
+// ── BOOTSTRAP OWNER ───────────────────────────────────────
+// Bootstrap removed — owner account already set up
+
+// ── OG COUNTER ────────────────────────────────────────────
+async function loadOGCounter() {
+  try {
+    const snap = await getDoc(doc(db,'meta','signupCounter'));
+    const count = snap.exists() ? (snap.data().count || 0) : 0;
+    const remaining = Math.max(0, 20 - count);
+    const el = document.getElementById('ogSpotsText');
+    if (!el) return;
+    if (remaining <= 0) {
+      el.textContent = 'All OG spots claimed!';
+      el.style.color = 'var(--text-dim)';
+      document.getElementById('ogCounter').style.opacity = '0.5';
+    } else {
+      el.textContent = remaining + ' of 20 spots remaining';
+      el.style.color = '#ffd700';
+    }
+  } catch(e) {
+    const el = document.getElementById('ogSpotsText');
+    if (el) el.textContent = '20 spots available';
+  }
+}
+loadOGCounter();
+
+// ── HELPERS ───────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById('statusBar').textContent = msg;
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg; el.style.display = 'block';
+  document.getElementById('successMsg').style.display = 'none';
+}
+
+function showSuccess(msg) {
+  const el = document.getElementById('successMsg');
+  el.textContent = msg; el.style.display = 'block';
+  document.getElementById('errorMsg').style.display = 'none';
+}
+
+function hideMessages() {
+  document.getElementById('errorMsg').style.display = 'none';
+  document.getElementById('successMsg').style.display = 'none';
+}
+
+
+// ── LOGIN ─────────────────────────────────────────────────
+window.doLogin = async function() {
+  hideMessages();
+  const email = document.getElementById('emailInput').value.trim();
+  const pass  = document.getElementById('passInput').value;
+  if (!email || !pass) { showError('Please enter your email and password.'); return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = 'Logging in';
+  setStatus('Authenticating...');
+
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    const uid  = cred.user.uid;
+    setStatus('Loading profile...');
+
+    const userSnap = await getDoc(doc(db,'users',uid));
+    if (!userSnap.exists()) {
+      showError('No profile found for this account.');
+      btn.disabled=false; btn.classList.remove('loading'); btn.textContent='Login'; setStatus(''); return;
+    }
+    const userData = userSnap.data();
+    const role = userData.role || 'User';
+
+    if (userData.banned) {
+      showLockout('⛔','PERMANENTLY BANNED','Your account has been permanently banned from NOVA.');
+      showLockoutAppeal(cred.user.uid, userData, 'ban_appeal');
+      btn.disabled=false; btn.classList.remove('loading'); btn.textContent='Login'; setStatus(''); return;
+    }
+
+    if (userData.tempBannedUntil) {
+      const until = userData.tempBannedUntil.seconds
+        ? userData.tempBannedUntil.seconds * 1000
+        : new Date(userData.tempBannedUntil).getTime();
+      if (Date.now() < until) {
+        showLockout('🚫','TEMPORARILY BANNED',`You are banned until ${new Date(until).toLocaleString()}.`);
+        showLockoutAppeal(cred.user.uid, userData, 'ban_appeal');
+        btn.disabled=false; btn.classList.remove('loading'); btn.textContent='Login'; setStatus(''); return;
+      }
+    }
+
+    setStatus('Checking system...');
+    const settSnap = await getDoc(doc(db,'settings','global'));
+    const settings = settSnap.exists() ? settSnap.data() : {};
+
+    if (settings.emergency && role !== 'Owner') {
+      showLockout('🚨','EMERGENCY SHUTDOWN', settings.emergencyMessage||'System locked.');
+      btn.disabled=false; btn.classList.remove('loading'); btn.textContent='Login'; setStatus(''); return;
+    }
+    if (settings.maintenance && (role==='Staff'||role==='User')) {
+      showLockout('🔧','MAINTENANCE MODE', settings.maintenanceMessage||'System under maintenance.');
+      btn.disabled=false; btn.classList.remove('loading'); btn.textContent='Login'; setStatus(''); return;
+    }
+
+    setStatus('Welcome back!');
+    sessionStorage.setItem('nova_uid',   uid);
+    sessionStorage.setItem('nova_email', email);
+    sessionStorage.setItem('nova_role',  role);
+
+    // Page transition
+    document.body.style.animation = 'fadeOut 0.4s ease forwards';
+    const fadeStyle = document.createElement('style');
+    fadeStyle.textContent = '@keyframes fadeOut{to{opacity:0;transform:scale(1.02)}}';
+    document.head.appendChild(fadeStyle);
+
+    setTimeout(() => { window.location.href = 'chat.html'; }, 400);
+
+  } catch(e) {
+    btn.disabled=false; btn.classList.remove('loading'); btn.textContent='Login'; setStatus('');
+    const msgs = {
+      'auth/invalid-credential':    'Invalid email or password.',
+      'auth/user-not-found':        'No account with that email.',
+      'auth/wrong-password':        'Incorrect password.',
+      'auth/too-many-requests':     'Too many attempts. Try again later.',
+      'auth/network-request-failed':'Network error. Check your connection.',
+    };
+    showError(msgs[e.code] || e.message);
+  }
+};
+
+// ── REGISTER ──────────────────────────────────────────────
+window.openRegister = function() {
+  document.getElementById('registerModal').style.display = 'flex';
+  document.getElementById('regError').style.display = 'none';
+  setTimeout(() => document.getElementById('regUsername').focus(), 100);
+};
+
+window.closeRegister = function() {
+  document.getElementById('registerModal').style.display = 'none';
+};
+
+window.doRegister = async function() {
+  const username = document.getElementById('regUsername').value.trim();
+  const email    = document.getElementById('regEmail').value.trim();
+  const pass     = document.getElementById('regPass').value;
+  const pass2    = document.getElementById('regPass2').value;
+  const errEl    = document.getElementById('regError');
+  const btn      = document.getElementById('regBtn');
+
+  errEl.style.display = 'none';
+  const showErr = msg => { errEl.textContent=msg; errEl.style.display='block'; };
+
+  if (!username)       { showErr('Username is required.'); return; }
+  if (!email)          { showErr('Email is required.'); return; }
+  if (pass.length < 6) { showErr('Password must be at least 6 characters.'); return; }
+  if (pass !== pass2)  { showErr('Passwords do not match.'); return; }
+
+  btn.disabled = true; btn.textContent = 'Creating...';
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+
+    // Check OG status — first 20 signups get the OG badge
+    const counterRef = doc(db,'meta','signupCounter');
+    const counterSnap = await getDoc(counterRef);
+    const currentCount = counterSnap.exists() ? (counterSnap.data().count || 0) : 0;
+    const isOG = currentCount < 20;
+
+    // Increment counter
+    await setDoc(counterRef, { count: currentCount + 1 }, { merge: true });
+
+    await setDoc(doc(db,'users',cred.user.uid), {
+      email, role:'User', username,
+      warningsCount:0, banned:false, tempBannedUntil:null,
+      mutedUntil:null, pfp:'', pingCount:0, punishmentHistory:[], theme:'midnight',
+      og: isOG, signupNumber: currentCount + 1, joinedAt: Date.now(),
+    });
+    await auth.signOut();
+    closeRegister();
+    document.getElementById('emailInput').value = email;
+    document.getElementById('passInput').value  = pass;
+    if (isOG) {
+      showSuccess('✓ Account created! You are OG user #' + (currentCount + 1) + ' 🌟 Click Login to continue.');
+    } else {
+      showSuccess('✓ Account created! Click Login to continue.');
+    }
+    // Refresh counter display
+    loadOGCounter();
+  } catch(e) {
+    const msgs = {
+      'auth/email-already-in-use': 'An account with that email already exists.',
+      'auth/invalid-email':        'Invalid email address.',
+      'auth/weak-password':        'Password is too weak.',
+    };
+    showErr(msgs[e.code] || e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Register';
+  }
+};
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('registerModal').style.display === 'none') {
+    window.doLogin();
+  }
+});
+</script>
+</body>
+</html>
