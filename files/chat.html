@@ -686,47 +686,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);display:flex;f
 <script>window.addEventListener("load",()=>{if(window.emailjs)emailjs.init("G7xmtT6VrVzxi1rfJ");});</script>
 </head>
 <body>
-<!-- ═══════════════════════════════════════════════════
-     NOVA SHUTDOWN CONTROL
-     When it's time: change NOVA_SHUTDOWN to true
-     ═══════════════════════════════════════════════════ -->
-<script>
-  const NOVA_SHUTDOWN = false;
-  if(NOVA_SHUTDOWN){
-    document.addEventListener('DOMContentLoaded', ()=>{
-      document.body.innerHTML = `
-        <div style="min-height:100vh;background:#0a0a0a;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;padding:24px">
-          <div style="max-width:520px;width:100%;text-align:center">
-            <div style="color:#00ff41;font-family:'VT323',monospace;font-size:48px;margin-bottom:8px;text-shadow:0 0 20px #00ff41">NOVA</div>
-            <div style="color:#005514;font-size:11px;letter-spacing:4px;margin-bottom:48px">2025 — 2026</div>
-            <div style="color:#00a82a;font-size:15px;line-height:2;margin-bottom:48px">
-              Nova is now closed.<br><br>
-              Thank you for being part of it.<br>
-              It was small. It was ours.<br>
-              That was enough.
-            </div>
-            <div style="border-top:1px solid #111;padding-top:32px;color:#005514;font-size:12px;line-height:2">
-              Someone Like You is still out there.<br>
-              If you want to find it, you will.<br><br>
-              — Rhys
-            </div>
-          </div>
-        </div>
-      `;
-    });
-  }
-</script>
-<div id="shutdownBanner" style="background:linear-gradient(135deg,#1a0a0a,#2a0f0f);border-bottom:1px solid #5a1a1a;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;animation:fadeIn .4s ease">
-  <div style="display:flex;align-items:center;gap:12px">
-    <span style="font-size:18px">⚠️</span>
-    <div>
-      <div style="color:#ff6b6b;font-weight:700;font-size:13px;letter-spacing:0.5px">NOVA IS SHUTTING DOWN</div>
-      <div style="color:#cc8888;font-size:12px;margin-top:2px">Nova will officially close at the end of June 2026. Thank you for being here. — Rhys</div>
-    </div>
-  </div>
-  <button onclick="document.getElementById('shutdownBanner').style.display='none';localStorage.setItem('nova_shutdown_dismissed','1')" style="background:none;border:1px solid #5a1a1a;color:#cc8888;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:inherit" onmouseover="this.style.borderColor='#ff6b6b';this.style.color='#ff6b6b'" onmouseout="this.style.borderColor='#5a1a1a';this.style.color='#cc8888'">Dismiss</button>
-</div>
-
 <!-- TOPBAR -->
 <div class="topbar">
   <div class="topbar-left">
@@ -981,14 +940,6 @@ window.submitBanAppeal=async function(category){
 };
 
 onAuthStateChanged(auth, async user => {
-  // Show shutdown banner every login (dismissed per session only)
-  if(sessionStorage.getItem('nova_shutdown_dismissed') !== '1'){
-    const b = document.getElementById('shutdownBanner');
-    if(b) b.style.display='flex';
-  } else {
-    const b = document.getElementById('shutdownBanner');
-    if(b) b.style.display='none';
-  }
   _authResolved = true;
   if (!user) { window.location.href='index.html'; return; }
   const snap = await getDoc(doc(db,'users',user.uid));

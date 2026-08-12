@@ -527,44 +527,6 @@ input::placeholder { color: rgba(72,79,88,0.8); }
 </style>
 </head>
 <body>
-<!-- ═══════════════════════════════════════════════════
-     NOVA SHUTDOWN CONTROL
-     When it's time: change NOVA_SHUTDOWN to true
-     ═══════════════════════════════════════════════════ -->
-<script>
-  const NOVA_SHUTDOWN = false;
-  if(NOVA_SHUTDOWN){
-    document.addEventListener('DOMContentLoaded', ()=>{
-      document.body.innerHTML = `
-        <div style="min-height:100vh;background:#0a0a0a;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;padding:24px">
-          <div style="max-width:520px;width:100%;text-align:center">
-            <div style="color:#00ff41;font-family:'VT323',monospace;font-size:48px;margin-bottom:8px;text-shadow:0 0 20px #00ff41">NOVA</div>
-            <div style="color:#005514;font-size:11px;letter-spacing:4px;margin-bottom:48px">2025 — 2026</div>
-            <div style="color:#00a82a;font-size:15px;line-height:2;margin-bottom:48px">
-              Nova is now closed.<br><br>
-              Thank you for being part of it.<br>
-              It was small. It was ours.<br>
-              That was enough.
-            </div>
-            <div style="border-top:1px solid #111;padding-top:32px;color:#005514;font-size:12px;line-height:2">
-              Someone Like You is still out there.<br>
-              If you want to find it, you will.<br><br>
-              — Rhys
-            </div>
-          </div>
-        </div>
-      `;
-    });
-  }
-</script>
-<div style="background:linear-gradient(135deg,#1a0a0a,#2a0f0f);border-bottom:1px solid #5a1a1a;padding:12px 20px;display:flex;align-items:center;gap:12px">
-  <span style="font-size:16px">⚠️</span>
-  <div>
-    <div style="color:#ff6b6b;font-weight:700;font-size:12px;letter-spacing:0.5px">NOVA IS SHUTTING DOWN</div>
-    <div style="color:#cc8888;font-size:11px;margin-top:2px">Nova will officially close at the end of June 2026. Thank you for being part of it. — Rhys</div>
-  </div>
-</div>
-
 <canvas id="starCanvas"></canvas>
 <div class="orb orb-1"></div>
 <div class="orb orb-2"></div>
